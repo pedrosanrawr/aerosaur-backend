@@ -1,0 +1,303 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Aerosaur backend - SAM (API Gateway + Lambda + DynamoDB)
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 15
+    MemorySize: 256
+    CodeUri: .
+    Environment:
+      Variables:
+        USERS_TABLE: !Ref UsersTable
+        DEVICES_TABLE: !Ref DevicesTable
+        READINGS_TABLE: !Ref ReadingsTable
+        CONTROL_TABLE: !Ref ControlTable
+        NOTIFICATIONS_TABLE: !Ref NotificationsTable
+        FIREBASE_SERVICE_ACCOUNT_JSON: "" 
+    LoggingConfig:
+      LogFormat: JSON
+
+Parameters:
+  StageName:
+    Type: String
+    Default: prod
+
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowHeaders: ["*"]
+        AllowMethods: ["GET","POST","PUT","DELETE","OPTIONS"]
+
+  # -------------------------
+  # DynamoDB Tables
+  # -------------------------
+
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: UserId
+          AttributeType: S
+        - AttributeName: Username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: UserId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UsernameIndex
+          KeySchema:
+            - AttributeName: Username
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  DevicesTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DeviceId
+          AttributeType: S
+        - AttributeName: ownerUserId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DeviceId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: OwnerUserIdIndex
+          KeySchema:
+            - AttributeName: ownerUserId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ReadingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DeviceId
+          AttributeType: S
+        - AttributeName: Timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DeviceId
+          KeyType: HASH
+        - AttributeName: Timestamp
+          KeyType: RANGE
+
+  ControlTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DeviceId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DeviceId
+          KeyType: HASH
+
+  NotificationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: UserId
+          AttributeType: S
+        - AttributeName: CreatedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: UserId
+          KeyType: HASH
+        - AttributeName: CreatedAt
+          KeyType: RANGE
+
+  # -------------------------
+  # Lambda Functions
+  # -------------------------
+
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/health.handler
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /health
+            Method: GET
+
+  UsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/users.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DevicesTable
+      Events:
+        GetMe:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /users/me
+            Method: GET
+        UpsertProfile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /users/profile
+            Method: POST
+
+  DevicesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/devices.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DevicesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        ListDevices:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices
+            Method: GET
+        RegisterDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices/register
+            Method: POST
+        GetDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices/{deviceId}
+            Method: GET
+        RenameDevice:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices/{deviceId}/rename
+            Method: POST
+
+  ReadingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/readings.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ReadingsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DevicesTable
+      Events:
+        LatestReading:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices/{deviceId}/readings/latest
+            Method: GET
+        QueryReadings:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices/{deviceId}/readings
+            Method: GET
+
+  ControlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/control.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ControlTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DevicesTable
+      Events:
+        GetControl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices/{deviceId}/control
+            Method: GET
+        UpdateControl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices/{deviceId}/control
+            Method: PUT
+
+  NotificationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/notifications.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NotificationsTable
+      Events:
+        ListNotifications:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /notifications
+            Method: GET
+        MarkAllRead:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /notifications/mark-all-read
+            Method: POST
+        MarkOneRead:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /notifications/{createdAt}/read
+            Method: POST
+        ClearAll:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /notifications/clear-all
+            Method: DELETE
+
+  AnalyticsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/analytics.handler
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ReadingsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ControlTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DevicesTable
+      Events:
+        Analytics7d:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices/{deviceId}/analytics/7d
+            Method: GET
+        AnalyticsToday:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /devices/{deviceId}/analytics/today
+            Method: GET
+
+Outputs:
+  ApiUrl:
+    Description: HTTP API base URL
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
