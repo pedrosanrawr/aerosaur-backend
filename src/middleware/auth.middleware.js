@@ -1,5 +1,5 @@
 import { unauthorized, json } from "../lib/response.js";
-import { verifyBearerAuthHeader } from "../lib/firebaseAdmin.js";
+import { verifyBearerAuthHeader } from "../lib/auth_firebase.js";
 import { parseJsonBody } from "../lib/parse.js";
 
 export function withAuth(next) {
