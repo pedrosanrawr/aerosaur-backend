@@ -25,4 +25,4 @@ export async function verifyBearerAuthHeader(authHeader) {
 
   initFirebaseAdmin(serviceJson);
   return await admin.auth().verifyIdToken(token);
-}
+} 
