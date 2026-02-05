@@ -16,6 +16,7 @@ Globals:
         CONTROL_TABLE: !Ref ControlTable
         NOTIFICATIONS_TABLE: !Ref NotificationsTable
         FIREBASE_SERVICE_ACCOUNT_JSON: "" 
+        IOT_ENDPOINT: ""
     LoggingConfig:
       LogFormat: JSON
 
@@ -225,6 +226,11 @@ Resources:
             TableName: !Ref ControlTable
         - DynamoDBReadPolicy:
             TableName: !Ref DevicesTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - iot:Publish
+              Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/aerosaur/*/cmd"
       Events:
         GetControl:
           Type: HttpApi
