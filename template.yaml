@@ -194,6 +194,17 @@ Resources:
             Path: /devices/{deviceId}/rename
             Method: POST
 
+  UpdaterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/updater.handler
+      Environment:
+        Variables:
+          DEVICES_TABLE: !Ref DevicesTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DevicesTable
+
   ReadingsFunction:
     Type: AWS::Serverless::Function
     Properties:

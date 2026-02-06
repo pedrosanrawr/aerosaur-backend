@@ -29,7 +29,6 @@ export async function getControl(deviceId) {
 export async function upsertControl(deviceId, patch) {
   const now = Date.now();
 
-  // Build update expression dynamically
   const sets = [];
   const names = {};
   const values = { ":now": now };

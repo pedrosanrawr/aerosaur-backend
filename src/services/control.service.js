@@ -4,7 +4,6 @@ import * as ControlRepo from "../repos/control.repo.js";
 
 const IOT_ENDPOINT = process.env.IOT_ENDPOINT;
 
-// Create client only if configured
 const iot =
   IOT_ENDPOINT && IOT_ENDPOINT.trim().length > 0
     ? new IoTDataPlaneClient({ endpoint: `https://${IOT_ENDPOINT}` })
@@ -30,7 +29,6 @@ function sanitizePatch(patch) {
     clean.fanSpeed = s;
   }
 
-  // If no recognized fields
   if (Object.keys(clean).length === 0) {
     const err = new Error("No valid control fields provided");
     err.statusCode = 400;
@@ -63,7 +61,6 @@ async function publishCommand(deviceId, patch, meta = {}) {
 }
 
 export async function getControl({ userId, deviceId }) {
-  // 1) ownership check
   const device = await ControlRepo.getDevice(deviceId);
   if (!device) {
     const err = new Error("Device not found");
@@ -76,7 +73,6 @@ export async function getControl({ userId, deviceId }) {
     throw err;
   }
 
-  // 2) get existing control, return defaults if missing
   const control = await ControlRepo.getControl(deviceId);
   return (
     control ?? {
@@ -92,7 +88,6 @@ export async function getControl({ userId, deviceId }) {
 }
 
 export async function updateControl({ userId, deviceId, patch }) {
-  // 1) ownership check
   const device = await ControlRepo.getDevice(deviceId);
   if (!device) {
     const err = new Error("Device not found");
@@ -105,15 +100,11 @@ export async function updateControl({ userId, deviceId, patch }) {
     throw err;
   }
 
-  // 2) validate + sanitize
   const cleanPatch = sanitizePatch(patch);
 
-  // 3) update DynamoDB (source of truth for desired state)
   const updated = await ControlRepo.upsertControl(deviceId, cleanPatch);
 
-  // 4) publish MQTT command to device
   const pub = await publishCommand(deviceId, cleanPatch, { requestedBy: userId });
 
-  // 5) return updated state (+ cmdId if you want to show “sent”)
   return { ...updated, lastCmdId: pub.cmdId ?? null };
 }
