@@ -1,9 +1,8 @@
-import { ok } from "../lib/response.js";
+import express from 'express';
+import { getAnalytics } from './analytics.controller.js';
 
-export const handler = async () => {
-  return ok({
-    status: "ok",
-    service: "aerosaur-backend",
-    timestamp: new Date().toISOString(),
-  });
-};
+const router = express.Router();
+
+router.get('/:deviceId', getAnalytics);
+
+export default router;
