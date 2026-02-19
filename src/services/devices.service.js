@@ -1,4 +1,5 @@
 import * as DevicesRepo from "../repos/devices.repo.js";
+import { publishFactoryReset } from "../lib/iot.js";
 
 function forbidden(msg = "Forbidden") {
   const err = new Error(msg);
@@ -58,3 +59,26 @@ export async function renameMyDevice(userId, deviceId, newName) {
 
   return DevicesRepo.updateName(deviceId, newName.trim());
 }
+
+export async function unregisterMyDevice(userId, deviceId) {
+  if (!deviceId || typeof deviceId !== "string") badRequest("deviceId required");
+
+  const device = await DevicesRepo.getById(deviceId);
+  if (!device) return null;
+  if (device.ownerUserId !== userId) forbidden("Device not owned by user");
+
+  const updated = await DevicesRepo.unbindOwner(deviceId, userId);
+
+  try {
+    await publishFactoryReset(deviceId);
+  } catch (e) {
+    console.log("Factory reset publish failed:", {
+      deviceId,
+      err: e?.message || String(e),
+    });
+  }
+
+  return updated;
+}
+
+

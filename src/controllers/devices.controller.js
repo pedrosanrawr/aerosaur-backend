@@ -81,3 +81,17 @@ export async function renameDevice(event) {
     device: normalizeDevice(updated),
   });
 }
+
+export async function unregisterDevice(event) {
+  const userId = requireUserId(event);
+  const deviceId = event.pathParameters?.deviceId;
+
+  const updated = await DevicesService.unregisterMyDevice(userId, deviceId);
+
+  if (!updated) {
+    return json(404, { message: "Device not found" });
+  }
+
+  return json(200, { device: normalizeDevice(updated) });
+}
+

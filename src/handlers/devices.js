@@ -16,6 +16,9 @@ export const handler = withAuth(async (event) => {
     case "POST /devices/{deviceId}/rename":
       return DevicesController.renameDevice(event);
 
+    case "DELETE /devices/{deviceId}":
+      return DevicesController.unregisterDevice(event);
+
     default:
       return json(404, { message: "Not Found" });
   }
