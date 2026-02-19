@@ -121,3 +121,36 @@ export async function updateConnectionStatus(deviceId, { online, lastSeen }) {
   );
   return res.Attributes;
 }
+
+export async function getDeviceById(deviceId) {
+  return getById(deviceId);
+}
+
+export async function unbindOwner(deviceId, ownerUserId) {
+  const res = await ddb.send(
+    new UpdateCommand({
+      TableName: DEVICES_TABLE,
+      Key: { DeviceId: deviceId },
+
+      ConditionExpression: "ownerUserId = :u",
+      ExpressionAttributeValues: {
+        ":u": ownerUserId,
+        ":t": new Date().toISOString(),
+        ":o": false,
+        ":ls": null,
+      },
+
+      ExpressionAttributeNames: {
+        "#on": "online",
+      },
+
+      UpdateExpression:
+        "REMOVE ownerUserId SET unboundAt = :t, #on = :o, lastSeen = :ls",
+
+      ReturnValues: "ALL_NEW",
+    })
+  );
+
+  return res.Attributes;
+}
+

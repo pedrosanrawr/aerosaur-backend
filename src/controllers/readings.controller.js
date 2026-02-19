@@ -1,22 +1,22 @@
-import * as ReadingsService from '../services/readings.service.js';
-import { ok } from '../lib/response.js';
+import { json } from "../lib/response.js";
+import * as ReadingsService from "../services/readings.service.js";
 
-export const getReadings = async (req, res, next) => {
-    try {
-        const { deviceId } = req.params;
-        const { limit, lastEvaluatedKey } = req.query;
+export async function getLatest(event, ctx) {
+  const deviceId = event.pathParameters?.deviceId;
+  const result = await ReadingsService.getLatest({ deviceId, userId: ctx.userId });
+  return json(result.status, result.body);
+}
 
-        if (!deviceId) {
-            return res.status(400).json({ message: "Device ID is required" });
-        }
-        const options = {};
-        if (limit) options.limit = parseInt(limit, 10);
-        if (lastEvaluatedKey) options.lastEvaluatedKey = lastEvaluatedKey;
-        const readings = await ReadingsService.getReadings(deviceId, options);
-        return ok(res, { readings });
-    }
-    catch (error) {
-        next(error);
+export async function query(event, ctx) {
+  const deviceId = event.pathParameters?.deviceId;
+  const { from, to, limit } = event.queryStringParameters ?? {};
+  const result = await ReadingsService.query({ deviceId, userId: ctx.userId, from, to, limit });
+  return json(result.status, result.body);
+}
 
-    }
-};
+export async function ingest(event) {
+  const deviceId = event.pathParameters?.deviceId;
+  const body = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
+  const result = await ReadingsService.ingest({ deviceId, payload: body });
+  return json(result.status, result.body);
+}
