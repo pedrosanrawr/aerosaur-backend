@@ -251,6 +251,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !GetAtt TelemetryIngestFunction.Arn
       Principal: iot.amazonaws.com
+
   ReadingsIoTRule:
     Type: AWS::IoT::TopicRule
     Properties:
@@ -263,6 +264,7 @@ Resources:
           - Lambda:
               FunctionArn: !GetAtt TelemetryIngestFunction.Arn
         AwsIotSqlVersion: "2016-03-23"
+
   TelemetryIngestFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -286,7 +288,7 @@ Resources:
             - Effect: Allow
               Action:
                 - iot:Publish
-              Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/aerosaur/*/cmd"
+              Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/devices/*/cmd"
       Events:
         GetControl:
           Type: HttpApi
@@ -300,6 +302,36 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /devices/{deviceId}/control
             Method: PUT
+
+  ControlAckPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt ControlAckFunction.Arn
+      Principal: iot.amazonaws.com
+
+  ControlAckIoTRule:
+    Type: AWS::IoT::TopicRule
+    Properties:
+      RuleName: "ControlAckToLambda"
+      TopicRulePayload:
+        RuleDisabled: false
+        Description: "Route device control ACKs to ControlAckFunction Lambda"
+        Sql: "SELECT topic(2) as deviceId, * as payload, topic() as topic FROM 'devices/+/ack'"
+        Actions:
+          - Lambda:
+              FunctionArn: !GetAtt ControlAckFunction.Arn
+        AwsIotSqlVersion: "2016-03-23"
+
+  ControlAckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/controlack.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ControlTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DevicesTable
 
   NotificationsFunction:
     Type: AWS::Serverless::Function
