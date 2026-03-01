@@ -4,10 +4,15 @@ import * as ControlRepo from "../repos/control.repo.js";
 
 const IOT_ENDPOINT = process.env.IOT_ENDPOINT;
 
-const iot =
-  IOT_ENDPOINT && IOT_ENDPOINT.trim().length > 0
-    ? new IoTDataPlaneClient({ endpoint: `https://${IOT_ENDPOINT}` })
-    : null;
+const rawEndpoint = (process.env.IOT_ENDPOINT || process.env.IOT_DATA_ENDPOINT || "").trim();
+
+const endpointHost = rawEndpoint
+  .replace(/^https?:\/\//, "")  
+  .replace(/\/+$/, "");      
+
+const iot = endpointHost.length
+  ? new IoTDataPlaneClient({ endpoint: `https://${endpointHost}` })
+  : null;
 
 const ALLOWED_FAN_SPEED = new Set(["SLOW", "MODERATE", "FAST"]);
 
@@ -51,7 +56,7 @@ async function publishCommand(deviceId, patch, meta = {}) {
 
   await iot.send(
     new PublishCommand({
-      topic: `aerosaur/${deviceId}/cmd`,
+      topic: `devices/${deviceId}/cmd`,
       qos: 1,
       payload: Buffer.from(JSON.stringify(payload)),
     })
@@ -89,11 +94,17 @@ export async function getControl({ userId, deviceId }) {
 
 export async function updateControl({ userId, deviceId, patch }) {
   const device = await ControlRepo.getDevice(deviceId);
+
+  console.log("AUTH userId:", userId);
+  console.log("DEVICE ownerUserId:", device?.ownerUserId);
+  console.log("DEVICE deviceId:", deviceId);
+
   if (!device) {
     const err = new Error("Device not found");
     err.statusCode = 404;
     throw err;
   }
+
   if (device.ownerUserId !== userId) {
     const err = new Error("Forbidden");
     err.statusCode = 403;
@@ -102,9 +113,13 @@ export async function updateControl({ userId, deviceId, patch }) {
 
   const cleanPatch = sanitizePatch(patch);
 
-  const updated = await ControlRepo.upsertControl(deviceId, cleanPatch);
-
   const pub = await publishCommand(deviceId, cleanPatch, { requestedBy: userId });
 
-  return { ...updated, lastCmdId: pub.cmdId ?? null };
+  const updated = await ControlRepo.upsertControl(deviceId, {
+    ...cleanPatch,
+    lastCmdId: pub.cmdId ?? null,
+    lastPublishOk: pub.published ?? false,
+  });
+
+  return updated;
 }
