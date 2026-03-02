@@ -1,5 +1,6 @@
 import * as DevicesRepo from "../repos/devices.repo.js";
 import { publishFactoryReset } from "../lib/iot.js";
+import QRCode from "qrcode";
 
 function forbidden(msg = "Forbidden") {
   const err = new Error(msg);
@@ -45,7 +46,9 @@ export async function registerDevice(userId, { deviceId, name }) {
     forbidden("Device already registered to another user");
   }
 
-  return DevicesRepo.bindOwnerAndMaybeRename(deviceId, userId, name);
+  const device = await DevicesRepo.bindOwnerAndMaybeRename(deviceId, userId, name);
+  const qrCode = await QRCode.toDataURL(deviceId);
+  return { ...device, qrCode };
 }
 
 export async function renameMyDevice(userId, deviceId, newName) {
@@ -80,5 +83,3 @@ export async function unregisterMyDevice(userId, deviceId) {
 
   return updated;
 }
-
-
