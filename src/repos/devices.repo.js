@@ -153,4 +153,3 @@ export async function unbindOwner(deviceId, ownerUserId) {
 
   return res.Attributes;
 }
-
