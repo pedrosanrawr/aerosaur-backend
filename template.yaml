@@ -22,6 +22,7 @@ Globals:
         PAYPAL_WEBHOOK_ID: ""
         FIREBASE_SERVICE_ACCOUNT_JSON: ""
         IOT_DATA_ENDPOINT: "https://a23ge4hk6k6811-ats.iot.ap-southeast-2.amazonaws.com"
+        DAILY_ANALYTICS_TABLE: !Ref DailyAnalyticsTable
     LoggingConfig:
       LogFormat: JSON
 
@@ -125,7 +126,35 @@ Resources:
         - AttributeName: CreatedAt
           KeyType: RANGE
 
-
+  DailyAnalyticsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DeviceId
+          AttributeType: S
+        - AttributeName: Date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DeviceId
+          KeyType: HASH
+        - AttributeName: Date
+          KeyType: RANGE
+          
+  BillingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: subscriptionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: subscriptionId
+          KeyType: RANGE
 
   # -------------------------
   # Lambda Functions
@@ -281,6 +310,8 @@ Resources:
             TableName: !Ref ReadingsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref DevicesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DailyAnalyticsTable
 
   ControlFunction:
     Type: AWS::Serverless::Function
@@ -384,6 +415,8 @@ Resources:
             TableName: !Ref ControlTable
         - DynamoDBReadPolicy:
             TableName: !Ref DevicesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DailyAnalyticsTable
       Events:
         Analytics7d:
           Type: HttpApi
