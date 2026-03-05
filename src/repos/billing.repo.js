@@ -1,61 +1,53 @@
-const {DynamoDBClient}= require('@aws-sdk/client-dynamodb');
-const {
-    DynamoDBDocumentClient, 
-    PutCommand, 
-    GetCommand,
-    UpdateCommand
-} = require('@aws-sdk/lib-dynamodb');
+import { PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { ddb } from '../lib/ddb.js'; // ✅ reuse existing DynamoDB client
+import { BILLING_TABLE } from '../config/env.js';
 
-const client = new DynamoDBClient({region: 'us-east-1'});//paltan mo nalang yung AWS region dito
-const dynamo = DynamoDBDocumentClient.from(client);
-
-const TABLE = 'BillingSubscriptions';
-
-async function saveSubscription(userId, subscriptionId, planId, status, approvalUrl){
-    await dynamo.send(new PutCommand({
-        TableName: TABLE,
-        Item: {
-            userId,
-            subscriptionId,
-            planId,
-            status,
-            approvalUrl,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        }
-    }));
+export async function saveSubscription(userId, subscriptionId, planId, status, approvalUrl) {
+  await ddb.send(
+    new PutCommand({
+      TableName: BILLING_TABLE,
+      Item: {
+        userId,
+        subscriptionId,
+        planId,
+        status,
+        approvalUrl,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    })
+  );
 }
 
-async function getSubscriptionByUserId(userId){
-    const result = await dynamo.send(new GetCommand({
-       TableName: TABLE,
-       KeyConditionExpression: 'userId = :uid AND begins_with(subscriptionId, :sub)',
-         ExpressionAttributeValues: {
-              ':uid': 'USER#${userId}',
-              ':sub': 'subscription#',
-         }
-    }));
-    return result.Items ? result.Items[0] : null;
+export async function getSubscriptionByUserId(userId) {
+  const result = await ddb.send(
+    new QueryCommand({
+      TableName: BILLING_TABLE,
+      KeyConditionExpression: 'userId = :uid',
+      ExpressionAttributeValues: {
+        ':uid': userId,
+      },
+    })
+  );
+  return result.Items?.[0] || null;
 }
 
-async function updateSubscriptionStatus(userId,subscriptionId, status){
-    await dynamo.send(new UpdateCommand({
-        TableName: TABLE,
-        Key: {
-            userId: userId,
-            subscriptionId: subscriptionId,
-        },
-        UpdateExpression: 'SET #status =:status, updatedAt = :updatedAt',
-        ExpressionAttributeNames: {
-            '#status': status,
-            ':updatedAt': new Date().toISOString(),
-        },
-    }));
-
-}
-
-module.exports = {
-    saveSubscription,
-    getSubscriptionByUserId,
-    updateSubscriptionStatus
+export async function updateSubscriptionStatus(userId, subscriptionId, status) {
+  await ddb.send(
+    new UpdateCommand({
+      TableName: BILLING_TABLE,
+      Key: {
+        userId,
+        subscriptionId,
+      },
+      UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
+      ExpressionAttributeValues: {
+        ':status': status,
+        ':updatedAt': new Date().toISOString(),
+      },
+    })
+  );
 }

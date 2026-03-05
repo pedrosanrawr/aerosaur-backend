@@ -1,7 +1,7 @@
-const billingService = require('../services/billingService');
-const billingRepo = require('../repos/billingRepo');
+import * as billingService from '../services/billing.service.js';
+import * as billingRepo from '../repos/billing.repo.js';
 
-async function createSubscription(req, res) {
+export async function createSubscription(req, res) {
   try {
     const { planId, userId } = req.body;
 
@@ -9,18 +9,16 @@ async function createSubscription(req, res) {
       return res.status(400).json({ error: 'planId and userId are required' });
     }
 
-    const subscription = await billingService.createSubscription({ planId, userId });
+    const subscription = await billingService.createSubscription(planId, userId);
+    const approvalUrl = subscription.links.find((l) => l.rel === 'approve').href;
 
-    const approvalUrl = subscription.links.find(l => l.rel === 'approve').href;
-
-    // Save pending subscription to DynamoDB
-    await billingRepo.saveSubscription({
+    await billingRepo.saveSubscription(
       userId,
-      subscriptionId: subscription.id,
+      subscription.id,
       planId,
-      status: 'PENDING',
-      approvalUrl,
-    });
+      'PENDING',
+      approvalUrl
+    );
 
     return res.status(201).json({
       subscriptionId: subscription.id,
@@ -32,16 +30,15 @@ async function createSubscription(req, res) {
   }
 }
 
-async function getSubscription(req, res) {
+export async function getSubscription(req, res) {
   try {
     const { userId } = req.params;
-    const record = await billingRepo.getSubscriptionByUser(userId);
+    const record = await billingRepo.getSubscriptionByUserId(userId);
 
     if (!record) {
       return res.status(404).json({ error: 'No subscription found' });
     }
 
-    // Get latest status from PayPal
     const liveData = await billingService.getSubscription(record.subscriptionId);
 
     return res.status(200).json({
@@ -56,15 +53,14 @@ async function getSubscription(req, res) {
   }
 }
 
-async function cancelSubscription(req, res) {
+export async function cancelSubscription(req, res) {
   try {
     const { userId } = req.params;
-    const { reason } = req.body;
+    const record = await billingRepo.getSubscriptionByUserId(userId);
 
-    const record = await billingRepo.getSubscriptionByUser(userId);
     if (!record) return res.status(404).json({ error: 'No subscription found' });
 
-    await billingService.cancelSubscription(record.subscriptionId, reason);
+    await billingService.cancelSubscription(record.subscriptionId);
     await billingRepo.updateSubscriptionStatus(userId, record.subscriptionId, 'CANCELLED');
 
     return res.status(200).json({ message: 'Subscription cancelled successfully' });
@@ -73,5 +69,3 @@ async function cancelSubscription(req, res) {
     return res.status(500).json({ error: 'Failed to cancel subscription' });
   }
 }
-
-module.exports = { createSubscription, getSubscription, cancelSubscription };
