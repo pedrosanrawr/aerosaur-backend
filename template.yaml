@@ -15,6 +15,11 @@ Globals:
         READINGS_TABLE: !Ref ReadingsTable
         CONTROL_TABLE: !Ref ControlTable
         NOTIFICATIONS_TABLE: !Ref NotificationsTable
+        BILLING_TABLE: !Ref BillingTable
+        PAYPAL_CLIENT_ID: "AebQMKIEIQA3ZNQN3w5bLB8rkubkOxxo-JoFfRK-bdyw7LwqP9LoOkcV_xd1D-BdWZg_s7u0upUWhvjF"
+        PAYPAL_SECRET: "ELVLgO0VO8f-S0spqrGKbDxXISMiLbXwtTW2URKCIFod3uvP6kq1f_JtkBXOZLK6wo5QFsmNxAb_Z6oZ"
+        PAYPAL_BASE_URL: "https://api-m.sandbox.paypal.com"
+        PAYPAL_WEBHOOK_ID: ""
         FIREBASE_SERVICE_ACCOUNT_JSON: ""
         IOT_DATA_ENDPOINT: "https://a23ge4hk6k6811-ats.iot.ap-southeast-2.amazonaws.com"
     LoggingConfig:
@@ -120,6 +125,21 @@ Resources:
         - AttributeName: CreatedAt
           KeyType: RANGE
 
+  BillingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: subscriptionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: subscriptionId
+          KeyType: RANGE
+
   # -------------------------
   # Lambda Functions
   # -------------------------
@@ -221,7 +241,7 @@ Resources:
     Properties:
       Handler: src/handlers/readings.handler
       Policies:
-        - DynamoDBCrudPolicy:       
+        - DynamoDBCrudPolicy:
             TableName: !Ref ReadingsTable
         - DynamoDBReadPolicy:
             TableName: !Ref DevicesTable
@@ -238,13 +258,13 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /devices/{deviceId}/readings
             Method: GET
-        IngestReading:              
+        IngestReading:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /devices/{deviceId}/readings
             Method: POST
-            
+
   TelemetryIngestPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -390,6 +410,39 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /devices/{deviceId}/analytics/today
             Method: GET
+
+  BillingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/billing.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BillingTable
+      Events:
+        CreateSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /billing/subscription
+            Method: POST
+        GetSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /billing/subscription/{userId}
+            Method: GET
+        CancelSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /billing/subscription/{userId}
+            Method: DELETE
+        PaypalWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /billing/webhook
+            Method: POST
 
 Outputs:
   ApiUrl:
