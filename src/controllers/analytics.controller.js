@@ -1,6 +1,10 @@
-import * as service from './analytics.service.js';
+import * as service from "../services/analytics.service.js";
 
-export const fetchDashboardData = async (req) => {
-  const deviceId = req.query.deviceId || "default_dev";
-  return await service.generateInsights(deviceId);
-};
+export async function getAnalytics(deviceId, range) {
+  const data = await service.getAnalytics(deviceId, range);
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify(data)
+  };
+}

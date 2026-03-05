@@ -4,18 +4,24 @@ import { json } from "../lib/response.js";
 export const handler = async (event) => {
   try {
     const deviceId = event.deviceId;
-    const payload = event.payload ?? event;
+
+    let payload = event.payload ?? event;
+
+    if (typeof payload === "string") {
+      payload = JSON.parse(payload);
+    }
 
     if (!deviceId) {
       console.log("Telemetry ingest missing deviceId:", JSON.stringify(event));
       return json(400, { message: "Missing deviceId" });
     }
 
-    console.log("Telemetry ingest hit:", { deviceId });
+    console.log("Telemetry ingest hit:", { deviceId, payload });
 
     const result = await ReadingsService.ingest({ deviceId, payload });
 
     console.log("Telemetry ingest ok:", { deviceId, status: result.status });
+
     return json(result.status, result.body);
   } catch (e) {
     console.error("Telemetry ingest failed:", e);
