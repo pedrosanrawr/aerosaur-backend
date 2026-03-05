@@ -15,7 +15,7 @@ Globals:
         READINGS_TABLE: !Ref ReadingsTable
         CONTROL_TABLE: !Ref ControlTable
         NOTIFICATIONS_TABLE: !Ref NotificationsTable
-        BILLING_TABLE: !Ref BillingTable
+        BILLING_TABLE: "BillingTable"
         PAYPAL_CLIENT_ID: "AebQMKIEIQA3ZNQN3w5bLB8rkubkOxxo-JoFfRK-bdyw7LwqP9LoOkcV_xd1D-BdWZg_s7u0upUWhvjF"
         PAYPAL_SECRET: "ELVLgO0VO8f-S0spqrGKbDxXISMiLbXwtTW2URKCIFod3uvP6kq1f_JtkBXOZLK6wo5QFsmNxAb_Z6oZ"
         PAYPAL_BASE_URL: "https://api-m.sandbox.paypal.com"
@@ -125,20 +125,7 @@ Resources:
         - AttributeName: CreatedAt
           KeyType: RANGE
 
-  BillingTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: userId
-          AttributeType: S
-        - AttributeName: subscriptionId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: userId
-          KeyType: HASH
-        - AttributeName: subscriptionId
-          KeyType: RANGE
+
 
   # -------------------------
   # Lambda Functions
