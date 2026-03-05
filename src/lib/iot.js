@@ -3,8 +3,6 @@ import { IoTDataPlaneClient, PublishCommand } from "@aws-sdk/client-iot-data-pla
 function getIotClient() {
   const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
   const endpoint = process.env.IOT_DATA_ENDPOINT; 
-  // Example value you should set:
-  // IOT_DATA_ENDPOINT = https://xxxxxxx-ats.iot.ap-southeast-1.amazonaws.com
 
   if (!region) throw new Error("Missing AWS_REGION");
   if (!endpoint) throw new Error("Missing IOT_DATA_ENDPOINT (must include https://)");

@@ -1,5 +1,6 @@
 import * as ReadingsRepo from "../repos/readings.repo.js";
 import * as DevicesRepo from "../repos/devices.repo.js";
+import * as AnalyticsRepo from "../repos/analytics.repo.js";
 
 const AQI_DEADBAND = 5;       
 const FORCE_INTERVAL_SEC = 60; 
@@ -131,6 +132,7 @@ export async function ingest({ deviceId, payload }) {
   const now = new Date();
   const iso = payload.ts ? new Date(payload.ts).toISOString() : now.toISOString();
   const nowSec = Math.floor(new Date(iso).getTime() / 1000);
+  const date = iso.substring(0, 10); 
 
   const raw = {
     DeviceId: deviceId,
@@ -179,10 +181,27 @@ export async function ingest({ deviceId, payload }) {
     await ReadingsRepo.putLatestItem(next);
   }
 
-  await DevicesRepo.updateConnectionStatus(deviceId, {
-    online: true,
-    lastSeen: iso,
-  });
+  try {
+    await DevicesRepo.updateConnectionStatus(deviceId, {
+      online: true,
+      lastSeen: iso,
+    });
+  } catch (err) {
+    console.warn("Device status update failed:", err.message);
+  }
+
+  try {
+    const fanOn = payload.power ?? false;
+    const smartMode = payload.smartMode ?? false;
+
+    await AnalyticsRepo.updateDailyStats(deviceId, date, {
+      aqi: aqiSmooth,
+      isOn: fanOn,
+      smartMode,
+    });
+  } catch (err) {
+    console.warn("Daily analytics update failed:", err.message);
+  }
 
   return {
     status: 201,
