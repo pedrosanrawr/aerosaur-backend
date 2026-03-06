@@ -19,7 +19,7 @@ Globals:
         PAYPAL_CLIENT_ID: "AebQMKIEIQA3ZNQN3w5bLB8rkubkOxxo-JoFfRK-bdyw7LwqP9LoOkcV_xd1D-BdWZg_s7u0upUWhvjF"
         PAYPAL_SECRET: "ELVLgO0VO8f-S0spqrGKbDxXISMiLbXwtTW2URKCIFod3uvP6kq1f_JtkBXOZLK6wo5QFsmNxAb_Z6oZ"
         PAYPAL_BASE_URL: "https://api-m.sandbox.paypal.com"
-        PAYPAL_WEBHOOK_ID: ""
+        PAYPAL_WEBHOOK_ID: "66800733SD605434H"
         FIREBASE_SERVICE_ACCOUNT_JSON: ""
         IOT_DATA_ENDPOINT: "https://a23ge4hk6k6811-ats.iot.ap-southeast-2.amazonaws.com"
         DAILY_ANALYTICS_TABLE: !Ref DailyAnalyticsTable

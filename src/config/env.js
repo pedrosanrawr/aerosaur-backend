@@ -15,4 +15,4 @@ export const BILLING_TABLE = required("BILLING_TABLE");
 export const PAYPAL_CLIENT_ID = required("PAYPAL_CLIENT_ID");
 export const PAYPAL_SECRET = required("PAYPAL_SECRET");
 export const PAYPAL_BASE_URL = required("PAYPAL_BASE_URL");
-export const PAYPAL_WEBHOOK_ID = required("PAYPAL_WEBHOOK_ID");
+export const PAYPAL_WEBHOOK_ID =  process.env.PAYPAL_WEBHOOK_ID || "";
