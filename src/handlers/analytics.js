@@ -1,5 +1,8 @@
 import { getAnalytics } from "../controllers/analytics.controller.js";
 
+app.get('/devices/:deviceId/analytics/7d', requirePremium, analyticsController.get7d);
+app.get('/devices/:deviceId/analytics/today', requirePremium, analyticsController.getToday);
+
 export const handler = async (event) => {
   try {
     const deviceId = event.pathParameters.deviceId;
