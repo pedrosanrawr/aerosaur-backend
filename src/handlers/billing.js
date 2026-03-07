@@ -11,6 +11,7 @@ app.post('/billing/subscription', billingController.createSubscription);
 app.get('/billing/subscription/:userId', billingController.getSubscription);
 app.delete('/billing/subscription/:userId', billingController.cancelSubscription);
 
+
 app.post('/billing/webhook', verifyWebhookSignature, async (req, res) => {
   const event = req.body;
 
@@ -55,4 +56,4 @@ app.post('/billing/webhook', verifyWebhookSignature, async (req, res) => {
   }
 });
 
-export const handler = serverless(app);
+export const handler = serverless(app, { basePath: '/prod' });
