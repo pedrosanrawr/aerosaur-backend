@@ -50,21 +50,55 @@ export async function updateDailyStats(deviceId, date, { aqi, isOn, smartMode })
         totalAQI = if_not_exists(totalAQI, :zero) + :aqi,
         totalCount = if_not_exists(totalCount, :zero) + :one,
         peakAQI = if_not_exists(peakAQI, :aqi)
-      ADD
-        totalOnSeconds :onSec,
-        smartSeconds :smartSec,
-        goodCount :good
     `,
 
     ExpressionAttributeValues: {
       ":zero": 0,
       ":one": 1,
-      ":aqi": aqi,
-      ":onSec": onSeconds,
-      ":smartSec": smartSeconds,
-      ":good": aqi <= 100 ? 1 : 0
-    }
+      ":aqi": aqi
+    },
+
+    ReturnValues: "ALL_NEW"
   });
 
-  await ddb.send(command);
+  const result = await ddb.send(command);
+
+  const currentPeak = result.Attributes.peakAQI ?? aqi;
+
+  if (aqi > currentPeak) {
+    await ddb.send(
+      new UpdateCommand({
+        TableName: DAILY_ANALYTICS_TABLE,
+        Key: {
+          DeviceId: deviceId,
+          Date: date
+        },
+        UpdateExpression: "SET peakAQI = :p",
+        ExpressionAttributeValues: {
+          ":p": aqi
+        }
+      })
+    );
+  }
+
+  await ddb.send(
+    new UpdateCommand({
+      TableName: DAILY_ANALYTICS_TABLE,
+      Key: {
+        DeviceId: deviceId,
+        Date: date
+      },
+      UpdateExpression: `
+        ADD
+          totalOnSeconds :onSec,
+          smartSeconds :smartSec,
+          goodCount :good
+      `,
+      ExpressionAttributeValues: {
+        ":onSec": onSeconds,
+        ":smartSec": smartSeconds,
+        ":good": aqi <= 100 ? 1 : 0
+      }
+    })
+  );
 }

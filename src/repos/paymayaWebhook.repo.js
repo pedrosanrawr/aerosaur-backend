@@ -1,4 +1,4 @@
-const { docClient } = require('../lib/paymayaDynamoDBCLient');
+const { ddb } = require('../lib/paymayaDynamoDBCLient');
 const { PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { v4: uuidv4 } = require('uuid');
 
@@ -13,7 +13,7 @@ const logWebhookEvent = async ({ paymentId, event, payload }) => {
     receivedAt: new Date().toISOString(),
   };
 
-  await docClient.send(new PutCommand({ TableName: WEBHOOKS_TABLE, Item: item }));
+  await ddb.send(new PutCommand({ TableName: WEBHOOKS_TABLE, Item: item }));
   return item;
 };
 

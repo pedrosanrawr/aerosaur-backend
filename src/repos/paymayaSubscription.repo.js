@@ -1,19 +1,19 @@
-const { docClient } = require('../lib/paymayaDynamoDBCLient');
+const { ddb } = require('../lib/paymayaDynamoDBCLient');
 const { PutCommand, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
 
 const SUBSCRIPTIONS_TABLE = process.env.SUBSCRIPTIONS_TABLE;
 
 const createSubscription = async (item) => {
-  await docClient.send(new PutCommand({
+  await ddb.send(new PutCommand({
     TableName: SUBSCRIPTIONS_TABLE,
-    ConditionExpression: 'attribute_not_exists(paymentId)', // prevent duplicates
+    ConditionExpression: 'attribute_not_exists(paymentId)',
     Item: item,
   }));
   return item;
 };
 
 const getSubscriptionByPaymentId = async (paymentId) => {
-  const result = await docClient.send(new GetCommand({
+  const result = await ddb.send(new GetCommand({
     TableName: SUBSCRIPTIONS_TABLE,
     Key: { paymentId },
   }));
@@ -21,7 +21,7 @@ const getSubscriptionByPaymentId = async (paymentId) => {
 };
 
 const getActiveSubscriptionByUserId = async (userId) => {
-  const result = await docClient.send(new QueryCommand({
+  const result = await ddb.send(new QueryCommand({
     TableName: SUBSCRIPTIONS_TABLE,
     IndexName: 'userId-index',
     KeyConditionExpression: 'userId = :userId',
@@ -37,7 +37,7 @@ const getActiveSubscriptionByUserId = async (userId) => {
 };
 
 const updateSubscriptionStatus = async (paymentId, status, extra = {}) => {
-  await docClient.send(new UpdateCommand({
+  await ddb.send(new UpdateCommand({
     TableName: SUBSCRIPTIONS_TABLE,
     Key: { paymentId },
     UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',

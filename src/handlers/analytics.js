@@ -1,13 +1,17 @@
 import { getAnalytics } from "../controllers/analytics.controller.js";
 
-app.get('/devices/:deviceId/analytics/7d', requirePremium, analyticsController.get7d);
-app.get('/devices/:deviceId/analytics/today', requirePremium, analyticsController.getToday);
-
 export const handler = async (event) => {
   try {
-    const deviceId = event.pathParameters.deviceId;
+    const deviceId = event.pathParameters?.deviceId;
 
-    const path = event.rawPath;
+    if (!deviceId) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: "Missing deviceId" }),
+      };
+    }
+
+    const path = event.rawPath || "";
 
     let range = "7d";
     if (path.includes("today")) {
@@ -17,10 +21,13 @@ export const handler = async (event) => {
     return await getAnalytics(deviceId, range);
 
   } catch (error) {
-    console.error(error);
+    console.error("Analytics error:", error);
+
     return {
       statusCode: 500,
-      body: JSON.stringify({ message: "Analytics error" })
+      body: JSON.stringify({
+        message: "Analytics error"
+      }),
     };
   }
 };
