@@ -15,13 +15,13 @@ Globals:
         READINGS_TABLE: !Ref ReadingsTable
         CONTROL_TABLE: !Ref ControlTable
         NOTIFICATIONS_TABLE: !Ref NotificationsTable
-        BILLING_TABLE: "BillingTable"
-        PAYPAL_CLIENT_ID: "AebQMKIEIQA3ZNQN3w5bLB8rkubkOxxo-JoFfRK-bdyw7LwqP9LoOkcV_xd1D-BdWZg_s7u0upUWhvjF"
-        PAYPAL_SECRET: "ELVLgO0VO8f-S0spqrGKbDxXISMiLbXwtTW2URKCIFod3uvP6kq1f_JtkBXOZLK6wo5QFsmNxAb_Z6oZ"
-        PAYPAL_BASE_URL: "https://api-m.sandbox.paypal.com"
-        PAYPAL_WEBHOOK_ID: "66800733SD605434H"
-        FIREBASE_SERVICE_ACCOUNT_JSON: ""
-        IOT_DATA_ENDPOINT: "https://a23ge4hk6k6811-ats.iot.ap-southeast-2.amazonaws.com"
+        BILLING_TABLE: !Ref BillingTable
+        PAYPAL_CLIENT_ID: !Ref PaypalClientId
+        PAYPAL_SECRET: !Ref PaypalSecret
+        PAYPAL_BASE_URL: !Ref PaypalBaseUrl
+        PAYPAL_WEBHOOK_ID: !Ref PaypalWebhookId
+        FIREBASE_SERVICE_ACCOUNT_JSON: !Ref FirebaseServiceAccountJson
+        IOT_DATA_ENDPOINT: !Ref IoTDataEndpoint
         DAILY_ANALYTICS_TABLE: !Ref DailyAnalyticsTable
     LoggingConfig:
       LogFormat: JSON
@@ -30,6 +30,19 @@ Parameters:
   StageName:
     Type: String
     Default: prod
+  PaypalClientId:
+    Type: String
+  PaypalSecret:
+    Type: String
+  PaypalWebhookId:
+    Type: String
+  PaypalBaseUrl:
+    Type: String
+    Default: https://api-m.sandbox.paypal.com
+  FirebaseServiceAccountJson:
+    Type: String
+  IoTDataEndpoint:
+    Type: String
 
 Resources:
   HttpApi:
@@ -312,6 +325,8 @@ Resources:
             TableName: !Ref DevicesTable
         - DynamoDBCrudPolicy:
             TableName: !Ref DailyAnalyticsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ControlTable
 
   ControlFunction:
     Type: AWS::Serverless::Function

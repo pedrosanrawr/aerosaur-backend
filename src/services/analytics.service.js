@@ -22,102 +22,78 @@ export async function getAnalytics(deviceId, range) {
 
 function computeFromDaily(rows) {
 
-  if (!rows.length) {
-    return {
-      aqiTrend: [],
-      usageTrend: [],
-      summary: {
-        aqiAverage7d: 0,
-        aqiPeak7d: 0,
-        purifierUsageHours7d: 0,
-        totalUsageHours7d: 0,
-        goodPercentage: 0,
-        directHoursToday: 0,
-        energySavedPercent: 0
-      }
-    };
+  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  // Create last 7 calendar days
+  const today = new Date();
+  const last7Days = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    last7Days.push(d.toISOString().slice(0, 10));
   }
 
-  rows.sort((a, b) => new Date(a.Date) - new Date(b.Date));
+  // Map DB rows by date for quick lookup
+  const rowMap = {};
+  rows.forEach(r => {
+    rowMap[r.Date] = r;
+  });
 
   const aqiTrend = [];
   const usageTrend = [];
 
-  let totalAQI = 0;
-  let totalCount = 0;
-  let peakAQI = 0;
+  last7Days.forEach(date => {
 
-  let totalSeconds = 0;
-  let smartSeconds = 0;
-  let goodReadings = 0;
+    const r = rowMap[date] || {};
 
-  rows.forEach(r => {
-
-    const totalCountDay = r.totalCount || 0;
-    const totalAQIDay = r.totalAQI || 0;
-
-    const avgAQI = totalCountDay === 0
-      ? 0
-      : Math.round(totalAQIDay / totalCountDay);
+    const avgAQI =
+      !r.totalCount
+        ? 0
+        : Math.round((r.totalAQI || 0) / (r.totalCount || 1));
 
     aqiTrend.push({
-      date: r.Date,
+      date,
       avgAQI,
       peakAQI: r.peakAQI || 0
     });
 
-    const onSeconds = r.totalOnSeconds || 0;
-    const hours = Number((onSeconds / 3600).toFixed(1));
-
     usageTrend.push({
-      date: r.Date,
-      hours
+      date,
+      day: dayNames[new Date(date).getDay()],
+      hours: Number(((r.totalOnSeconds || 0) / 3600).toFixed(1))
     });
 
-    totalAQI += totalAQIDay;
-    totalCount += totalCountDay;
-    totalSeconds += onSeconds;
-    smartSeconds += r.smartSeconds || 0;
-
-    peakAQI = Math.max(peakAQI, r.peakAQI || 0);
-
-    goodReadings += r.goodCount || 0;
   });
 
-  const aqiAverage7d =
-    totalCount === 0 ? 0 : Math.round(totalAQI / totalCount);
+  const todayRow = rowMap[last7Days[last7Days.length - 1]] || {};
 
-  const purifierUsageHours7d =
-    Number((smartSeconds / 3600).toFixed(1));
-
-  const totalUsageHours7d =
-    Number((totalSeconds / 3600).toFixed(1));
-
-  const goodPercentage =
-    totalCount === 0
+  const aqiAverageToday =
+    !todayRow.totalCount
       ? 0
-      : Math.round((goodReadings / totalCount) * 100);
+      : Math.round((todayRow.totalAQI || 0) / todayRow.totalCount);
 
-  const energySavedPercent =
-    totalSeconds === 0
-      ? 0
-      : Math.round((smartSeconds / totalSeconds) * 100);
-
-  const today = rows[rows.length - 1];
+  const aqiPeakToday = todayRow.peakAQI || 0;
 
   const directHoursToday =
-    today
-      ? Number(((today.totalOnSeconds || 0) / 3600).toFixed(1))
-      : 0;
+    Number(((todayRow.totalOnSeconds || 0) / 3600).toFixed(1));
+
+  const goodPercentage =
+    !todayRow.totalCount
+      ? 0
+      : Math.round((todayRow.goodCount || 0) / todayRow.totalCount * 100);
+
+  const energySavedPercent =
+    !todayRow.totalOnSeconds
+      ? 0
+      : Math.round((todayRow.smartSeconds || 0) / todayRow.totalOnSeconds * 100);
 
   return {
     aqiTrend,
     usageTrend,
     summary: {
-      aqiAverage7d,
-      aqiPeak7d: peakAQI,
-      purifierUsageHours7d,
-      totalUsageHours7d,
+      aqiAverageToday,
+      aqiPeakToday,
       goodPercentage,
       directHoursToday,
       energySavedPercent

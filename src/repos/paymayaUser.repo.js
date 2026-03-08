@@ -1,10 +1,10 @@
-const { docClient } = require('../lib/paymayaDynamoDBCLient');
+const { ddb } = require('../lib/paymayaDynamoDBCLient');
 const { UpdateCommand, GetCommand } = require('@aws-sdk/lib-dynamodb');
 
 const USERS_TABLE = process.env.USERS_TABLE;
 
 const grantPremiumAccess = async ({ userId, planId, expiresAt }) => {
-  await docClient.send(new UpdateCommand({
+  await ddb.send(new UpdateCommand({
     TableName: USERS_TABLE,
     Key: { userId },
     UpdateExpression: `
@@ -23,7 +23,7 @@ const grantPremiumAccess = async ({ userId, planId, expiresAt }) => {
 };
 
 const revokePremiumAccess = async (userId) => {
-  await docClient.send(new UpdateCommand({
+  await ddb.send(new UpdateCommand({
     TableName: USERS_TABLE,
     Key: { userId },
     UpdateExpression: `
@@ -42,7 +42,7 @@ const revokePremiumAccess = async (userId) => {
 };
 
 const getUserById = async (userId) => {
-  const result = await docClient.send(new GetCommand({
+  const result = await ddb.send(new GetCommand({
     TableName: USERS_TABLE,
     Key: { userId },
   }));
