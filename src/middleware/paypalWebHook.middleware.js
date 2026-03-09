@@ -2,11 +2,14 @@ import { paypalRequest } from '../lib/paypalClient.js';
 import { PAYPAL_CLIENT_ID, PAYPAL_WEBHOOK_ID } from '../config/env.js';
 
 export async function verifyWebhookSignature(req, res, next) {
+
   try {
     const webhookEvent = typeof req.body === 'string' 
       ? JSON.parse(req.body)  
       : req.body;         
          
+    const rawBody = req.body instanceof Buffer ? req.body : Buffer.from(JSON.stringify(req.body));
+    
     const verification = await paypalRequest(
       'POST',
       '/v1/notifications/verify-webhook-signature',
