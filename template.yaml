@@ -478,7 +478,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /billing/webhook
             Method: POST
-
+            PayloadFormatVersion: "1.0"
 Outputs:
   ApiUrl:
     Description: HTTP API base URL
