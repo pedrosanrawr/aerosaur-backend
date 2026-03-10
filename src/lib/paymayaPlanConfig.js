@@ -3,7 +3,7 @@ const PLANS = {
     planId:      'PREMIUM_MONTHLY',
     name:        'Premium Monthly',
     description: 'Full access to all premium features for 1 month',
-    amount:      299,     //pa paltan dito ng monthly
+    amount:      9.99,     //pa paltan dito ng monthly
     currency:    'PHP',
     durationDays: 30,
   },

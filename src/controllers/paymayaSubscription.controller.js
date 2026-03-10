@@ -1,7 +1,6 @@
-const subscriptionService = require('../services/paymayaSubscription.service');
-const webhookService      = require('../services/paymayaWebhook.service');
+import * as subscriptionService from '../services/paymayaSubscription.service.js';
 
-const createCheckout = async (req, res) => {
+export const createCheckout = async (req, res) => {
   const { userId, planId, buyer, redirectUrls } = req.body;
 
   if (!userId || !planId) {
@@ -22,11 +21,16 @@ const createCheckout = async (req, res) => {
   }
 };
 
-const getPaymentStatus = async (req, res) => {
+export const getPaymentStatus = async (req, res) => {
   const { paymentId } = req.params;
+  const { userId } = req.query; // userId needed for table key lookup
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required as query param' });
+  }
 
   try {
-    const result = await subscriptionService.fetchAndSyncStatus(paymentId);
+    const result = await subscriptionService.fetchAndSyncStatus(userId, paymentId);
     return res.status(200).json(result);
   } catch (err) {
     console.error('[getPaymentStatus]', err.message);
@@ -34,7 +38,7 @@ const getPaymentStatus = async (req, res) => {
   }
 };
 
-const getPremiumStatus = async (req, res) => {
+export const getPremiumStatus = async (req, res) => {
   const { userId } = req.params;
 
   try {
@@ -45,21 +49,3 @@ const getPremiumStatus = async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch premium status' });
   }
 };
-
-const handleWebhook = async (req, res) => {
-  res.status(200).json({ received: true });
-
-  const signature = req.headers['x-signature'];
-
-  try {
-    await webhookService.handleWebhookEvent(req.body, signature);
-  } catch (err) {
-    if (err.message === 'INVALID_SIGNATURE') {
-      console.warn('[Webhook] Rejected — invalid signature');
-    } else {
-      console.error('[Webhook] Processing error:', err.message);
-    }
-  }
-};
-
-module.exports = { createCheckout, getPaymentStatus, getPremiumStatus, handleWebhook };

@@ -1,9 +1,10 @@
-const serverless = require('serverless-http');
-const express = require('express');
-const { createCheckout } = require('../controllers/paymayaSubscription.controller');
+import express from 'express';
+import serverless from 'serverless-http';
+import { createCheckout } from '../controllers/paymayaSubscription.controller.js';
 
 const app = express();
 app.use(express.json());
-app.post('/subscriptions/checkout', createCheckout);
 
-module.exports.handler = serverless(app);
+app.post('/paymaya/checkout', createCheckout);
+
+export const handler = serverless(app, { basePath: '/prod' });

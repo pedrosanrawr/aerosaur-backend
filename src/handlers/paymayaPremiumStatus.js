@@ -1,9 +1,10 @@
-const serverless = require('serverless-http');
-const express = require('express');
-const { getPaymentStatus } = require('../controllers/paymayaSubscription.controller');
+import express from 'express';
+import serverless from 'serverless-http';
+import { getPremiumStatus } from '../controllers/paymayaSubscription.controller.js';
 
 const app = express();
 app.use(express.json());
-app.get('/subscriptions/:paymentId/status', getPaymentStatus);
 
-module.exports.handler = serverless(app);
+app.get('/paymaya/premium/:userId', getPremiumStatus);
+
+export const handler = serverless(app, { basePath: '/prod' });
