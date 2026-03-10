@@ -1,29 +1,28 @@
-const { ddb } = require('../lib/paymayaDynamoDBCLient');
-const { PutCommand, GetCommand, UpdateCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+import { ddb } from '../lib/paymayaDynamoDBCLient.js';
+import { PutCommand, GetCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 
-const SUBSCRIPTIONS_TABLE = process.env.SUBSCRIPTIONS_TABLE;
+const PAYMAYA_TABLE = process.env.PAYMAYA_TABLE;
 
-const createSubscription = async (item) => {
+export const savePayment = async (item) => {
   await ddb.send(new PutCommand({
-    TableName: SUBSCRIPTIONS_TABLE,
+    TableName: PAYMAYA_TABLE,
     ConditionExpression: 'attribute_not_exists(paymentId)',
     Item: item,
   }));
   return item;
 };
 
-const getSubscriptionByPaymentId = async (paymentId) => {
+export const getPaymentByUserAndId = async (userId, paymentId) => {
   const result = await ddb.send(new GetCommand({
-    TableName: SUBSCRIPTIONS_TABLE,
-    Key: { paymentId },
+    TableName: PAYMAYA_TABLE,
+    Key: { userId, paymentId },
   }));
   return result.Item || null;
 };
 
-const getActiveSubscriptionByUserId = async (userId) => {
+export const getActivePaymentByUserId = async (userId) => {
   const result = await ddb.send(new QueryCommand({
-    TableName: SUBSCRIPTIONS_TABLE,
-    IndexName: 'userId-index',
+    TableName: PAYMAYA_TABLE,
     KeyConditionExpression: 'userId = :userId',
     FilterExpression: '#status = :status',
     ExpressionAttributeNames: { '#status': 'status' },
@@ -36,23 +35,16 @@ const getActiveSubscriptionByUserId = async (userId) => {
   return result.Items?.[0] || null;
 };
 
-const updateSubscriptionStatus = async (paymentId, status, extra = {}) => {
+export const updatePaymentStatus = async (userId, paymentId, status, planId = null) => {
   await ddb.send(new UpdateCommand({
-    TableName: SUBSCRIPTIONS_TABLE,
-    Key: { paymentId },
-    UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+    TableName: PAYMAYA_TABLE,
+    Key: { userId, paymentId },
+    UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt, planId = :planId',
     ExpressionAttributeNames: { '#status': 'status' },
     ExpressionAttributeValues: {
       ':status':    status,
       ':updatedAt': new Date().toISOString(),
-      ...extra,
+      ':planId':    planId,
     },
   }));
-};
-
-module.exports = {
-  createSubscription,
-  getSubscriptionByPaymentId,
-  getActiveSubscriptionByUserId,
-  updateSubscriptionStatus,
 };
