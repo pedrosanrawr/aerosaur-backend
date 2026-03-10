@@ -50,14 +50,14 @@ Parameters:
   IoTDataEndpoint:
     Type: String
   PaymayaPublicKey:
-    Type: String
-    Default: pk-Z0OSzLvIcOI2UIvDhdTGVVfRSSeiGStnceqwUE7n0Ah
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /aerosaur/paymaya/public-key
   PaymayaSecretKey:
-    Type: String
-    Default: sk-X8qolYjy62kIzEbr0QRK1h4b4KDVHaNcwMYk39jInSl
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /aerosaur/paymaya/secret-key
   PaymayaWebhookSecret:
-    Type: String
-    Default: aerosaur-webhook-secret-2024
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /aerosaur/paymaya/webhook-secret
   PaymayaEnv:
     Type: String
     Default: sandbox
