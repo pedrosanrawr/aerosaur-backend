@@ -15,8 +15,14 @@ Globals:
         READINGS_TABLE: !Ref ReadingsTable
         CONTROL_TABLE: !Ref ControlTable
         NOTIFICATIONS_TABLE: !Ref NotificationsTable
-        FIREBASE_SERVICE_ACCOUNT_JSON: ""
-        IOT_DATA_ENDPOINT: "https://a23ge4hk6k6811-ats.iot.ap-southeast-2.amazonaws.com"
+        BILLING_TABLE: !Ref BillingTable
+        PAYPAL_CLIENT_ID: !Ref PaypalClientId
+        PAYPAL_SECRET: !Ref PaypalSecret
+        PAYPAL_BASE_URL: !Ref PaypalBaseUrl
+        PAYPAL_WEBHOOK_ID: !Ref PaypalWebhookId
+        FIREBASE_SERVICE_ACCOUNT_JSON: !Ref FirebaseServiceAccountJson
+        IOT_DATA_ENDPOINT: !Ref IoTDataEndpoint
+        DAILY_ANALYTICS_TABLE: !Ref DailyAnalyticsTable
     LoggingConfig:
       LogFormat: JSON
 
@@ -24,6 +30,19 @@ Parameters:
   StageName:
     Type: String
     Default: prod
+  PaypalClientId:
+    Type: String
+  PaypalSecret:
+    Type: String
+  PaypalWebhookId:
+    Type: String
+  PaypalBaseUrl:
+    Type: String
+    Default: https://api-m.sandbox.paypal.com
+  FirebaseServiceAccountJson:
+    Type: String
+  IoTDataEndpoint:
+    Type: String
 
 Resources:
   HttpApi:
@@ -118,6 +137,36 @@ Resources:
         - AttributeName: UserId
           KeyType: HASH
         - AttributeName: CreatedAt
+          KeyType: RANGE
+
+  DailyAnalyticsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DeviceId
+          AttributeType: S
+        - AttributeName: Date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DeviceId
+          KeyType: HASH
+        - AttributeName: Date
+          KeyType: RANGE
+          
+  BillingTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: subscriptionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: subscriptionId
           KeyType: RANGE
 
   # -------------------------
@@ -221,7 +270,7 @@ Resources:
     Properties:
       Handler: src/handlers/readings.handler
       Policies:
-        - DynamoDBCrudPolicy:       
+        - DynamoDBCrudPolicy:
             TableName: !Ref ReadingsTable
         - DynamoDBReadPolicy:
             TableName: !Ref DevicesTable
@@ -238,19 +287,20 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /devices/{deviceId}/readings
             Method: GET
-        IngestReading:              
+        IngestReading:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /devices/{deviceId}/readings
             Method: POST
-            
+
   TelemetryIngestPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !GetAtt TelemetryIngestFunction.Arn
       Principal: iot.amazonaws.com
+
   ReadingsIoTRule:
     Type: AWS::IoT::TopicRule
     Properties:
@@ -263,6 +313,7 @@ Resources:
           - Lambda:
               FunctionArn: !GetAtt TelemetryIngestFunction.Arn
         AwsIotSqlVersion: "2016-03-23"
+
   TelemetryIngestFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -272,6 +323,10 @@ Resources:
             TableName: !Ref ReadingsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref DevicesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DailyAnalyticsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ControlTable
 
   ControlFunction:
     Type: AWS::Serverless::Function
@@ -286,7 +341,7 @@ Resources:
             - Effect: Allow
               Action:
                 - iot:Publish
-              Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/aerosaur/*/cmd"
+              Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/devices/*/cmd"
       Events:
         GetControl:
           Type: HttpApi
@@ -300,6 +355,36 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /devices/{deviceId}/control
             Method: PUT
+
+  ControlAckPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt ControlAckFunction.Arn
+      Principal: iot.amazonaws.com
+
+  ControlAckIoTRule:
+    Type: AWS::IoT::TopicRule
+    Properties:
+      RuleName: "ControlAckToLambda"
+      TopicRulePayload:
+        RuleDisabled: false
+        Description: "Route device control ACKs to ControlAckFunction Lambda"
+        Sql: "SELECT topic(2) as deviceId, * as payload, topic() as topic FROM 'devices/+/ack'"
+        Actions:
+          - Lambda:
+              FunctionArn: !GetAtt ControlAckFunction.Arn
+        AwsIotSqlVersion: "2016-03-23"
+
+  ControlAckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/controlack.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ControlTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DevicesTable
 
   NotificationsFunction:
     Type: AWS::Serverless::Function
@@ -345,6 +430,8 @@ Resources:
             TableName: !Ref ControlTable
         - DynamoDBReadPolicy:
             TableName: !Ref DevicesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref DailyAnalyticsTable
       Events:
         Analytics7d:
           Type: HttpApi
@@ -359,6 +446,39 @@ Resources:
             Path: /devices/{deviceId}/analytics/today
             Method: GET
 
+  BillingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/billing.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BillingTable
+      Events:
+        CreateSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /billing/subscription
+            Method: POST
+        GetSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /billing/subscription/{userId}
+            Method: GET
+        CancelSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /billing/subscription/{userId}
+            Method: DELETE
+        PaypalWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /billing/webhook
+            Method: POST
+            PayloadFormatVersion: "1.0"
 Outputs:
   ApiUrl:
     Description: HTTP API base URL

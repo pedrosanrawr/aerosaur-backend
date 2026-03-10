@@ -111,7 +111,10 @@ export async function updateConnectionStatus(deviceId, { online, lastSeen }) {
     new UpdateCommand({
       TableName: DEVICES_TABLE,
       Key: { DeviceId: deviceId },
-      UpdateExpression: "SET online = :o, lastSeen = :t",
+      UpdateExpression: "SET #on = :o, lastSeen = :t",
+      ExpressionAttributeNames: {
+        "#on": "online",
+      },
       ExpressionAttributeValues: {
         ":o": !!online,
         ":t": lastSeen ?? new Date().toISOString(),

@@ -1,5 +1,7 @@
 import * as ReadingsRepo from "../repos/readings.repo.js";
 import * as DevicesRepo from "../repos/devices.repo.js";
+import * as AnalyticsRepo from "../repos/analytics.repo.js";
+import * as ControlRepo from "../repos/control.repo.js";
 
 const AQI_DEADBAND = 5;       
 const FORCE_INTERVAL_SEC = 60; 
@@ -129,19 +131,20 @@ export async function query({ deviceId, userId, from, to, limit }) {
 
 export async function ingest({ deviceId, payload }) {
   const now = new Date();
-  const iso = payload.ts ? new Date(payload.ts).toISOString() : now.toISOString();
+  const iso = payload?.ts ? new Date(payload.ts).toISOString() : now.toISOString();
   const nowSec = Math.floor(new Date(iso).getTime() / 1000);
+  const date = iso.slice(0, 10);
 
   const raw = {
     DeviceId: deviceId,
     Timestamp: ReadingsRepo.makeRawSortKey(iso),
 
-    pm25: payload.pm25 ?? null,
-    pm10: payload.pm10 ?? null,
-    vocsPpm: payload.vocsPpm ?? null,
-    tempC: payload.tempC ?? null,
-    humidity: payload.humidity ?? null,
-    harmfulGasDetected: !!payload.harmfulGasDetected,
+    pm25: payload?.pm25 ?? null,
+    pm10: payload?.pm10 ?? null,
+    vocsPpm: payload?.vocsPpm ?? null,
+    tempC: payload?.tempC ?? null,
+    humidity: payload?.humidity ?? null,
+    harmfulGasDetected: !!payload?.harmfulGasDetected,
 
     ingestedAtSec: nowSec,
   };
@@ -151,38 +154,77 @@ export async function ingest({ deviceId, payload }) {
   const prev = await ReadingsRepo.getLatestDisplayItem(deviceId);
 
   const { aqi, primary, aqiPm25, aqiPm10 } = computeAQI(raw);
+
   const aqiEma = ema(prev?.aqiEma, aqi, EMA_ALPHA);
   const aqiSmooth = Math.round(aqiEma);
 
   const next = {
     DeviceId: deviceId,
     Timestamp: ReadingsRepo.LATEST_SK,
+
     pm25: raw.pm25,
     pm10: raw.pm10,
     vocsPpm: raw.vocsPpm,
     tempC: raw.tempC,
     humidity: raw.humidity,
     harmfulGasDetected: raw.harmfulGasDetected,
+
     aqi: aqiSmooth,
     aqiEma,
     aqiPrimaryPollutant: primary,
     aqiPm25,
     aqiPm10,
+
     aqiCategory: aqiCategory(aqiSmooth),
     aqiPercent: aqiPercent(aqiSmooth),
+
     updatedAtSec: nowSec,
     sourceRawTimestamp: raw.Timestamp,
   };
 
   const displayUpdated = shouldUpdateDisplay(prev, next, nowSec);
+
   if (displayUpdated) {
     await ReadingsRepo.putLatestItem(next);
   }
 
-  await DevicesRepo.updateConnectionStatus(deviceId, {
-    online: true,
-    lastSeen: iso,
-  });
+  try {
+    await DevicesRepo.updateConnectionStatus(deviceId, {
+      online: true,
+      lastSeen: iso,
+    });
+  } catch (err) {
+    console.warn("Device status update failed:", err.message);
+  }
+
+  let control = null;
+
+  try {
+    control = await ControlRepo.getControl(deviceId);
+  } catch (err) {
+    console.warn("Control fetch failed:", err.message);
+  }
+
+  const fanOn =
+    payload?.power ??
+    (payload?.fan_speed !== undefined ? payload.fan_speed > 0 : undefined) ??
+    control?.power ??
+    false;
+
+  const smartMode =
+    payload?.smartMode ??
+    control?.smartMode ??
+    false;
+
+  try {
+    await AnalyticsRepo.updateDailyStats(deviceId, date, {
+      aqi: aqiSmooth,
+      isOn: fanOn,
+      smartMode,
+    });
+  } catch (err) {
+    console.warn("Daily analytics update failed:", err.message);
+  }
 
   return {
     status: 201,

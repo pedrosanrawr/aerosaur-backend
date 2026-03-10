@@ -1,31 +1,33 @@
-import express from 'express';
-import { ok } from "../lib/response.js";
-import * as controller from "./analytics.controller.js";
+import { getAnalytics } from "../controllers/analytics.controller.js";
 
-const router = express.Router();
-
-export const handler = async (req, res, next) => {
+export const handler = async (event) => {
   try {
-    const insights = await controller.fetchDashboardData(req);
+    const deviceId = event.pathParameters?.deviceId;
 
-    return ok(res, {
-      status: "ok",
-      service: "aerosaur-analytics-v2",
-      timestamp: new Date().toISOString(),
-      data: {
-        user: { name: "Peter Dones", status: "online" },
-        aqiTrend: insights.aqiChart,
-        purifierUsage: insights.usageChart,
-        metrics: insights.summaryCards,
-        usageSummary: insights.usageStats
-      }
-    });
+    if (!deviceId) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ message: "Missing deviceId" }),
+      };
+    }
+
+    const path = event.rawPath || "";
+
+    let range = "7d";
+    if (path.includes("today")) {
+      range = "today";
+    }
+
+    return await getAnalytics(deviceId, range);
+
   } catch (error) {
-    next(error);
+    console.error("Analytics error:", error);
+
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        message: "Analytics error"
+      }),
+    };
   }
 };
-
-
-router.get('/', handler);
-
-export default router;

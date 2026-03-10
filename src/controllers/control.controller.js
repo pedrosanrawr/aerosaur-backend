@@ -8,28 +8,40 @@ function json(statusCode, data) {
   };
 }
 
+function handleError(err) {
+  const statusCode = err?.statusCode || 500;
+  return json(statusCode, { message: err?.message || "Internal Server Error" });
+}
+
 export async function getControl(event) {
-  const userId = event.auth?.userId; 
-  const deviceId = event.pathParameters?.deviceId;
+  try {
+    const userId = event.auth?.userId;
+    const deviceId = event.pathParameters?.deviceId;
+    if (!deviceId) return json(400, { message: "deviceId is required" });
 
-  if (!deviceId) return json(400, { message: "deviceId is required" });
-
-  const control = await ControlService.getControl({ userId, deviceId });
-  return json(200, control);
+    const control = await ControlService.getControl({ userId, deviceId });
+    return json(200, control);
+  } catch (err) {
+    return handleError(err);
+  }
 }
 
 export async function updateControl(event) {
-  const userId = event.auth?.userId;
-  const deviceId = event.pathParameters?.deviceId;
-  if (!deviceId) return json(400, { message: "deviceId is required" });
-
-  let patch = {};
   try {
-    patch = JSON.parse(event.body || "{}");
-  } catch {
-    return json(400, { message: "Invalid JSON body" });
-  }
+    const userId = event.userId;
+    const deviceId = event.pathParameters?.deviceId;
+    if (!deviceId) return json(400, { message: "deviceId is required" });
 
-  const updated = await ControlService.updateControl({ userId, deviceId, patch });
-  return json(200, updated);
+    let patch = {};
+    try {
+      patch = JSON.parse(event.body || "{}");
+    } catch {
+      return json(400, { message: "Invalid JSON body" });
+    }
+
+    const updated = await ControlService.updateControl({ userId, deviceId, patch });
+    return json(200, updated);
+  } catch (err) {
+    return handleError(err);
+  }
 }
