@@ -42,4 +42,4 @@ export async function verifyWebhookSignature(req, res, next) {
     console.error('Full error:', JSON.stringify(error.response?.data));
     return res.status(500).json({ error: 'Failed to verify webhook' });
   }
-}
+}//
