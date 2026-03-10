@@ -3,16 +3,24 @@ import { PAYPAL_CLIENT_ID, PAYPAL_WEBHOOK_ID } from '../config/env.js';
 
 export async function verifyWebhookSignature(req, res, next) {
   try {
-    console.log('=== WEBHOOK DEBUG ===');
-    console.log('Headers:', JSON.stringify(req.headers));
-    console.log('Body type:', typeof req.body);
-    console.log('Body:', JSON.stringify(req.body));
-    console.log('WEBHOOK_ID:', PAYPAL_WEBHOOK_ID);
-    console.log('CLIENT_ID:', PAYPAL_CLIENT_ID ? 'SET' : 'NOT SET');
+    let webhookEvent;
 
-    const webhookEvent = typeof req.body === 'string'
-      ? JSON.parse(req.body)
-      : req.body;
+    const body = req.body;
+
+    if (body?.type === 'Buffer' && Array.isArray(body?.data)) {
+      webhookEvent = JSON.parse(Buffer.from(body.data).toString('utf8'));
+    } else if (Buffer.isBuffer(body)) {
+   
+      webhookEvent = JSON.parse(body.toString('utf8'));
+    } else if (typeof body === 'string') {
+     
+      webhookEvent = JSON.parse(body);
+    } else {
+     
+      webhookEvent = body;
+    }
+
+    console.log('Parsed event_type:', webhookEvent.event_type);
 
     const verification = await paypalRequest(
       'POST',
@@ -29,7 +37,7 @@ export async function verifyWebhookSignature(req, res, next) {
       }
     );
 
-    console.log('Verification result:', JSON.stringify(verification));
+    console.log('Verification result:', verification.verification_status);
 
     if (verification.verification_status !== 'SUCCESS') {
       return res.status(400).json({ error: 'Invalid webhook signature' });
