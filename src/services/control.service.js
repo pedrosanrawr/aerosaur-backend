@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { IoTDataPlaneClient, PublishCommand } from "@aws-sdk/client-iot-data-plane";
 import * as ControlRepo from "../repos/control.repo.js";
+import * as ReadingsRepo from "../repos/readings.repo.js";
 
 const IOT_ENDPOINT = process.env.IOT_ENDPOINT;
 
@@ -15,6 +16,27 @@ const iot = endpointHost.length
   : null;
 
 const ALLOWED_FAN_SPEED = new Set(["SLOW", "MODERATE", "FAST"]);
+
+const trees = [
+  (aqi) => aqi <= 50  ? "SLOW" : aqi <= 100 ? "MODERATE" : "FAST",
+  (aqi) => aqi <= 48  ? "SLOW" : aqi <= 98  ? "MODERATE" : "FAST",
+  (aqi) => aqi <= 52  ? "SLOW" : aqi <= 102 ? "MODERATE" : "FAST",
+  (aqi) => aqi <= 50  ? "SLOW" : aqi <= 95  ? "MODERATE" : "FAST",
+  (aqi) => aqi <= 55  ? "SLOW" : aqi <= 100 ? "MODERATE" : "FAST",
+];
+
+function predictFanSpeed(aqi) {
+  const votes = trees.map((tree) => tree(aqi));
+  const count = {};
+  for (const v of votes) count[v] = (count[v] || 0) + 1;
+  return Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+}
+
+function getAqiSettings(aqi) {
+  const fanSpeed = predictFanSpeed(aqi);
+  if (fanSpeed === "SLOW") return { fanSpeed, power: false };
+  return { fanSpeed, power: true };
+}
 
 function sanitizePatch(patch) {
   const clean = {};
