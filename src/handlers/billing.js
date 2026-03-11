@@ -6,15 +6,9 @@ import { verifyWebhookSignature } from '../middleware/paypalWebHook.middleware.j
 
 const app = express();
 
-// ✅ Store raw body for webhook verification BEFORE parsing
-app.use((req, res, buf, next) => {
-  req.rawBody = buf;
-  next();
-});
-
 app.use(express.json({
   verify: (req, res, buf) => {
-    req.rawBody = buf; // ✅ capture raw buffer before parsing
+    req.rawBody = buf;
   }
 }));
 
