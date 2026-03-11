@@ -50,17 +50,17 @@ Parameters:
   IoTDataEndpoint:
     Type: String
   PaymayaPublicKey:
-    Type: AWS::SSM::Parameter::Value<String>
-    Default: /aerosaur/paymaya/public-key
+    Type: String
+    Default: ""
   PaymayaSecretKey:
-    Type: AWS::SSM::Parameter::Value<String>
-    Default: /aerosaur/paymaya/secret-key
+    Type: String
+    Default: ""
   PaymayaWebhookSecret:
-    Type: AWS::SSM::Parameter::Value<String>
-    Default: /aerosaur/paymaya/webhook-secret
+    Type: String
+    Default: ""
   PaymayaEnv:
     Type: String
-    Default: sandbox
+    Default: "sandbox"
   AppUrl:
     Type: String
     Default: http://localhost:3000
