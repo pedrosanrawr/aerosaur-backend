@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { paymayaClient, publicAuthHeader, secretAuthHeader } from '../lib/paypalClient.js';
+import { paymayaClient, publicAuthHeader, secretAuthHeader } from '../lib/paymayaClient.js'; 
 import { getPlan } from '../lib/paymayaPlanConfig.js';
 import * as paymayaRepo from '../repos/paymayaSubscription.repo.js';
 
