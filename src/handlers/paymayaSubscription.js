@@ -142,6 +142,7 @@ app.post('/paymaya/webhook', async (req, res) => {
     console.error('Webhook processing error:', error.message);
     return res.sendStatus(200);
   }
+  
 });
 
 export const handler = serverless(app, { basePath: '/prod' });
