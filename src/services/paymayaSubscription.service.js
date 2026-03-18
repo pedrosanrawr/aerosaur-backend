@@ -1,10 +1,9 @@
-const { v4: uuidv4 } = require('uuid');
-const { paymayaClient, publicAuthHeader, secretAuthHeader } = require('../libraries/paymayaClient');
-const { getPlan } = require('../lib/paymayaPlanConfig');
-const subscriptionRepo = require('../repos/paymayaSubscription.repo');
-const userRepo         = require('../repos/paymayaUser.repo');
+import { v4 as uuidv4 } from 'uuid';
+import { paymayaClient, publicAuthHeader, secretAuthHeader } from '../lib/paymayaClient.js'; 
+import { getPlan } from '../lib/paymayaClient.js'; 
+import * as paymayaRepo from '../repos/paymayaSubscription.repo.js';
 
-const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrls }) => {
+export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrls }) => {
   const plan = getPlan(planId);
   const referenceId = uuidv4();
 
@@ -34,10 +33,10 @@ const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrls }) =>
     headers: { Authorization: publicAuthHeader() },
   });
 
-  await subscriptionRepo.createSubscription({
+  await paymayaRepo.savePayment({
+    userId,
     paymentId:   data.checkoutId,
     referenceId,
-    userId,
     planId,
     amount:      plan.amount,
     currency:    plan.currency,
@@ -55,12 +54,12 @@ const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrls }) =>
   };
 };
 
-const fetchAndSyncStatus = async (paymentId) => {
+export const fetchAndSyncStatus = async (userId, paymentId) => {
   const { data } = await paymayaClient.get(`/checkout/${paymentId}`, {
     headers: { Authorization: secretAuthHeader() },
   });
 
-  await subscriptionRepo.updateSubscriptionStatus(paymentId, data.status);
+  await paymayaRepo.updatePaymentStatus(userId, paymentId, data.status);
 
   return {
     paymentId,
@@ -71,23 +70,31 @@ const fetchAndSyncStatus = async (paymentId) => {
   };
 };
 
-const getUserPremiumStatus = async (userId) => {
-  const user = await userRepo.getUserById(userId);
-  if (!user) return { isPremium: false };
+export const getUserPremiumStatus = async (userId) => {
+  const record = await paymayaRepo.getActivePaymentByUserId(userId);
 
-  if (user.isPremium && user.premiumExpiresAt) {
-    const expired = new Date() > new Date(user.premiumExpiresAt);
+  if (!record) return { isPremium: false };
+
+  
+  if (record.expiresAt) {
+    const expired = new Date() > new Date(record.expiresAt);
     if (expired) {
-      await userRepo.revokePremiumAccess(userId);
+      await paymayaRepo.updatePaymentStatus(userId, record.paymentId, 'EXPIRED', record.planId);
       return { isPremium: false, reason: 'EXPIRED' };
     }
   }
 
   return {
-    isPremium:        user.isPremium || false,
-    premiumPlan:      user.premiumPlan || null,
-    premiumExpiresAt: user.premiumExpiresAt || null,
+    isPremium:   record.status === 'ACTIVE',
+    premiumPlan: record.planId || null,
+    expiresAt:   record.expiresAt || null,
+  
+    features: {
+      aiMonitoring:       true,   
+      aiInsights:         true,   
+      advancedControls:   true,  
+    },
   };
 };
 
-module.exports = { createPremiumCheckout, fetchAndSyncStatus, getUserPremiumStatus };
+

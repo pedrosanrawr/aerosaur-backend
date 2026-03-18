@@ -1,20 +1,20 @@
-const axios = require('axios');
+import axios from 'axios';
 
 const PAYMAYA_BASE_URL = process.env.PAYMAYA_ENV === 'production'
   ? 'https://pg.maya.ph/payments/v1'
   : 'https://pg-sandbox.maya.ph/payments/v1';
 
-const publicAuthHeader = () => {
+export const publicAuthHeader = () => {
   const encoded = Buffer.from(`${process.env.PAYMAYA_PUBLIC_KEY}:`).toString('base64');
   return `Basic ${encoded}`;
 };
 
-const secretAuthHeader = () => {
+export const secretAuthHeader = () => {
   const encoded = Buffer.from(`${process.env.PAYMAYA_SECRET_KEY}:`).toString('base64');
   return `Basic ${encoded}`;
 };
 
-const paymayaClient = axios.create({
+export const paymayaClient = axios.create({
   baseURL: PAYMAYA_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -27,4 +27,21 @@ paymayaClient.interceptors.response.use(
   }
 );
 
-module.exports = { paymayaClient, publicAuthHeader, secretAuthHeader };
+const PLANS = {
+  PREMIUM_MONTHLY: {
+    planId:      'PREMIUM_MONTHLY',
+    name:        'Premium Monthly',
+    description: 'Full access to all premium features for 1 month',
+    amount:      9.99,
+    currency:    'PHP',
+    durationDays: 30,
+  },
+};
+
+export const getPlan = (planId) => {
+  const plan = PLANS[planId];
+  if (!plan) throw new Error(`Invalid planId: ${planId}`);
+  return plan;
+};
+
+export { PLANS };

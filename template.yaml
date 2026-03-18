@@ -23,6 +23,12 @@ Globals:
         FIREBASE_SERVICE_ACCOUNT_JSON: !Ref FirebaseServiceAccountJson
         IOT_DATA_ENDPOINT: !Ref IoTDataEndpoint
         DAILY_ANALYTICS_TABLE: !Ref DailyAnalyticsTable
+        PAYMAYA_TABLE: !Ref PaymayaTable
+        PAYMAYA_PUBLIC_KEY: !Ref PaymayaPublicKey
+        PAYMAYA_SECRET_KEY: !Ref PaymayaSecretKey
+        PAYMAYA_WEBHOOK_SECRET: !Ref PaymayaWebhookSecret
+        PAYMAYA_ENV: !Ref PaymayaEnv
+        APP_URL: !Ref AppUrl
     LoggingConfig:
       LogFormat: JSON
 
@@ -43,6 +49,21 @@ Parameters:
     Type: String
   IoTDataEndpoint:
     Type: String
+  PaymayaPublicKey:
+    Type: String
+    Default: ""
+  PaymayaSecretKey:
+    Type: String
+    Default: ""
+  PaymayaWebhookSecret:
+    Type: String
+    Default: ""
+  PaymayaEnv:
+    Type: String
+    Default: "sandbox"
+  AppUrl:
+    Type: String
+    Default: http://localhost:3000
 
 Resources:
   HttpApi:
@@ -153,7 +174,7 @@ Resources:
           KeyType: HASH
         - AttributeName: Date
           KeyType: RANGE
-          
+
   BillingTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -169,6 +190,27 @@ Resources:
         - AttributeName: subscriptionId
           KeyType: RANGE
 
+  PaymayaTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: paymentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: paymentId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: PaymentIdIndex
+          KeySchema:
+            - AttributeName: paymentId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
   # -------------------------
   # Lambda Functions
   # -------------------------
@@ -479,6 +521,47 @@ Resources:
             Path: /billing/webhook
             Method: POST
             PayloadFormatVersion: "1.0"
+
+  # -------------------------
+  # PayMaya
+  # -------------------------
+
+  PaymayaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/paymayaSubscription.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaymayaTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        PaymayaCreateCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /paymaya/checkout
+            Method: POST
+        PaymayaGetStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /paymaya/status/{paymentId}
+            Method: GET
+        PaymayaGetPremiumStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /paymaya/premium/{userId}
+            Method: GET
+        PaymayaWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /paymaya/webhook
+            Method: POST
+            PayloadFormatVersion: "1.0"
+
 Outputs:
   ApiUrl:
     Description: HTTP API base URL
