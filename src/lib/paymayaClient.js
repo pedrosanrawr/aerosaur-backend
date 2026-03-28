@@ -1,9 +1,9 @@
 import axios from 'axios';
 
 const PAYMAYA_BASE_URL = process.env.PAYMAYA_ENV === 'production'
-  ? 'https://pg.maya.ph/payments/v1'
-  : 'https://pg-sandbox.maya.ph/payments/v1';
-
+  ? 'https://pg.maya.ph/checkout/v1'
+  : 'https://pg-sandbox.maya.ph/checkout/v1';
+  
 export const publicAuthHeader = () => {
   const encoded = Buffer.from(`${process.env.PAYMAYA_PUBLIC_KEY}:`).toString('base64');
   return `Basic ${encoded}`;
