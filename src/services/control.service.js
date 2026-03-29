@@ -2,41 +2,20 @@ import crypto from "crypto";
 import { IoTDataPlaneClient, PublishCommand } from "@aws-sdk/client-iot-data-plane";
 import * as ControlRepo from "../repos/control.repo.js";
 import * as ReadingsRepo from "../repos/readings.repo.js";
-
-const IOT_ENDPOINT = process.env.IOT_ENDPOINT;
+import { predictFanSpeed } from "../lib/smartmode.js";
+import { computeAQI } from "../lib/aqi.js";
 
 const rawEndpoint = (process.env.IOT_ENDPOINT || process.env.IOT_DATA_ENDPOINT || "").trim();
 
 const endpointHost = rawEndpoint
-  .replace(/^https?:\/\//, "")  
-  .replace(/\/+$/, "");      
+  .replace(/^https?:\/\//, "")
+  .replace(/\/+$/, "");
 
-const iot = endpointHost.length
+const iot = endpointHost
   ? new IoTDataPlaneClient({ endpoint: `https://${endpointHost}` })
   : null;
 
 const ALLOWED_FAN_SPEED = new Set(["SLOW", "MODERATE", "FAST"]);
-
-const trees = [
-  (aqi) => aqi <= 50  ? "SLOW" : aqi <= 100 ? "MODERATE" : "FAST",
-  (aqi) => aqi <= 48  ? "SLOW" : aqi <= 98  ? "MODERATE" : "FAST",
-  (aqi) => aqi <= 52  ? "SLOW" : aqi <= 102 ? "MODERATE" : "FAST",
-  (aqi) => aqi <= 50  ? "SLOW" : aqi <= 95  ? "MODERATE" : "FAST",
-  (aqi) => aqi <= 55  ? "SLOW" : aqi <= 100 ? "MODERATE" : "FAST",
-];
-
-function predictFanSpeed(aqi) {
-  const votes = trees.map((tree) => tree(aqi));
-  const count = {};
-  for (const v of votes) count[v] = (count[v] || 0) + 1;
-  return Object.keys(count).sort((a, b) => count[b] - count[a])[0];
-}
-
-function getAqiSettings(aqi) {
-  const fanSpeed = predictFanSpeed(aqi);
-  if (fanSpeed === "SLOW") return { fanSpeed, power: false };
-  return { fanSpeed, power: true };
-}
 
 function sanitizePatch(patch) {
   const clean = {};
@@ -56,7 +35,7 @@ function sanitizePatch(patch) {
     clean.fanSpeed = s;
   }
 
-  if (Object.keys(clean).length === 0) {
+  if (!Object.keys(clean).length) {
     const err = new Error("No valid control fields provided");
     err.statusCode = 400;
     throw err;
@@ -65,8 +44,11 @@ function sanitizePatch(patch) {
   return clean;
 }
 
-async function publishCommand(deviceId, patch, meta = {}) {
-  if (!iot) return { published: false, reason: "IOT_ENDPOINT not set" };
+export async function publishCommand(deviceId, patch, meta = {}) {
+  if (!iot) {
+    console.warn("IoT not configured — skipping publish");
+    return { published: false, reason: "IOT endpoint missing" };
+  }
 
   const payload = {
     cmdId: crypto.randomUUID(),
@@ -89,20 +71,12 @@ async function publishCommand(deviceId, patch, meta = {}) {
 
 export async function getControl({ userId, deviceId }) {
   const device = await ControlRepo.getDevice(deviceId);
-  if (!device) {
-    const err = new Error("Device not found");
-    err.statusCode = 404;
-    throw err;
-  }
-  if (device.ownerUserId !== userId) {
-    const err = new Error("Forbidden");
-    err.statusCode = 403;
-    throw err;
-  }
 
-  const control = await ControlRepo.getControl(deviceId);
+  if (!device) throw Object.assign(new Error("Device not found"), { statusCode: 404 });
+  if (device.ownerUserId !== userId) throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
+
   return (
-    control ?? {
+    (await ControlRepo.getControl(deviceId)) ?? {
       deviceId,
       power: false,
       smartMode: false,
@@ -117,31 +91,60 @@ export async function getControl({ userId, deviceId }) {
 export async function updateControl({ userId, deviceId, patch }) {
   const device = await ControlRepo.getDevice(deviceId);
 
-  console.log("AUTH userId:", userId);
-  console.log("DEVICE ownerUserId:", device?.ownerUserId);
-  console.log("DEVICE deviceId:", deviceId);
-
-  if (!device) {
-    const err = new Error("Device not found");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  if (device.ownerUserId !== userId) {
-    const err = new Error("Forbidden");
-    err.statusCode = 403;
-    throw err;
-  }
+  if (!device) throw Object.assign(new Error("Device not found"), { statusCode: 404 });
+  if (device.ownerUserId !== userId) throw Object.assign(new Error("Forbidden"), { statusCode: 403 });
 
   const cleanPatch = sanitizePatch(patch);
 
-  const pub = await publishCommand(deviceId, cleanPatch, { requestedBy: userId });
+  const current = await ControlRepo.getControl(deviceId) || {};
 
-  const updated = await ControlRepo.upsertControl(deviceId, {
-    ...cleanPatch,
+  let finalPatch = { ...current, ...cleanPatch };
+
+  delete finalPatch.DeviceId;
+  delete finalPatch.updatedAt;
+
+  if (finalPatch.smartMode) {
+    try {
+      const readings = await ReadingsRepo.getRecentReadings(deviceId, 5);
+
+      if (readings?.length) {
+        const recentAqis = readings
+          .map((reading) => computeAQI(reading).aqi)
+          .filter((aqi) => Number.isFinite(aqi));
+
+        if (!recentAqis.length) {
+          throw new Error("No AQI-capable readings available for smart mode");
+        }
+
+        const avgAqi =
+          recentAqis.reduce((sum, aqi) => sum + aqi, 0) / recentAqis.length;
+
+        const predictedSpeed = predictFanSpeed(avgAqi);
+
+        if (finalPatch.autoAdjust) {
+          finalPatch.fanSpeed = predictedSpeed;
+        }
+
+        if (finalPatch.autoOff) {
+          if (avgAqi <= 20) {
+            finalPatch.power = false;
+          } else {
+            finalPatch.power = true;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Smart mode error:", err);
+    }
+  }
+
+  const pub = await publishCommand(deviceId, finalPatch, {
+    requestedBy: userId,
+  });
+
+  return await ControlRepo.upsertControl(deviceId, {
+    ...finalPatch,
     lastCmdId: pub.cmdId ?? null,
     lastPublishOk: pub.published ?? false,
   });
-
-  return updated;
 }

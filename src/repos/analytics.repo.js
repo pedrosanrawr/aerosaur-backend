@@ -2,103 +2,83 @@ import { QueryCommand, UpdateCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { ddb } from "../lib/ddb.js";
 
 const DAILY_ANALYTICS_TABLE = process.env.DAILY_ANALYTICS_TABLE;
-const CONTROL_TABLE = process.env.CONTROL_TABLE;
+const MAX_SAMPLE_INTERVAL_SEC = 300;
 
 export async function getDailyStats(deviceId, fromDate) {
   const command = new QueryCommand({
     TableName: DAILY_ANALYTICS_TABLE,
     KeyConditionExpression: "DeviceId = :d AND #dt >= :from",
     ExpressionAttributeNames: {
-      "#dt": "Date"
+      "#dt": "Date",
     },
     ExpressionAttributeValues: {
       ":d": deviceId,
-      ":from": fromDate
-    }
+      ":from": fromDate,
+    },
   });
 
   const result = await ddb.send(command);
   return result.Items || [];
 }
 
-async function getControlState(deviceId) {
-  const command = new GetCommand({
-    TableName: CONTROL_TABLE,
-    Key: {
-      DeviceId: deviceId
-    }
-  });
+export async function updateDailyStats(
+  deviceId,
+  date,
+  { aqi, isOn, smartMode, sampledAtSec }
+) {
+  const current = await ddb.send(
+    new GetCommand({
+      TableName: DAILY_ANALYTICS_TABLE,
+      Key: {
+        DeviceId: deviceId,
+        Date: date,
+      },
+    })
+  );
 
-  const result = await ddb.send(command);
-  return result.Item || {};
-}
+  const existing = current.Item || {};
+  const prevSampleTs = existing.lastSampleTs;
 
-export async function updateDailyStats(deviceId, date, { aqi, isOn, smartMode }) {
+  const elapsedSec =
+    Number.isFinite(prevSampleTs) && sampledAtSec > prevSampleTs
+      ? Math.min(sampledAtSec - prevSampleTs, MAX_SAMPLE_INTERVAL_SEC)
+      : 0;
 
-  const onSeconds = isOn ? 5 : 0;
-  const smartSeconds = smartMode ? onSeconds : 0;
-
-  const command = new UpdateCommand({
-    TableName: DAILY_ANALYTICS_TABLE,
-    Key: {
-      DeviceId: deviceId,
-      Date: date
-    },
-
-    UpdateExpression: `
-      SET
-        totalAQI = if_not_exists(totalAQI, :zero) + :aqi,
-        totalCount = if_not_exists(totalCount, :zero) + :one,
-        peakAQI = if_not_exists(peakAQI, :aqi)
-    `,
-
-    ExpressionAttributeValues: {
-      ":zero": 0,
-      ":one": 1,
-      ":aqi": aqi
-    },
-
-    ReturnValues: "ALL_NEW"
-  });
-
-  const result = await ddb.send(command);
-
-  const currentPeak = result.Attributes.peakAQI ?? aqi;
-
-  if (aqi > currentPeak) {
-    await ddb.send(
-      new UpdateCommand({
-        TableName: DAILY_ANALYTICS_TABLE,
-        Key: {
-          DeviceId: deviceId,
-          Date: date
-        },
-        UpdateExpression: "SET peakAQI = :p",
-        ExpressionAttributeValues: {
-          ":p": aqi
-        }
-      })
-    );
-  }
+  const onSeconds = isOn ? elapsedSec : 0;
+  const smartSeconds = smartMode && isOn ? elapsedSec : 0;
+  const peakAQI = Math.max(existing.peakAQI ?? aqi, aqi);
 
   await ddb.send(
     new UpdateCommand({
       TableName: DAILY_ANALYTICS_TABLE,
       Key: {
         DeviceId: deviceId,
-        Date: date
+        Date: date,
       },
       UpdateExpression: `
-        ADD
-          totalOnSeconds :onSec,
-          smartSeconds :smartSec,
-          goodCount :good
+        SET
+          totalAQI = if_not_exists(totalAQI, :zero) + :aqi,
+          totalCount = if_not_exists(totalCount, :zero) + :one,
+          peakAQI = :peakAQI,
+          totalOnSeconds = if_not_exists(totalOnSeconds, :zero) + :onSec,
+          smartSeconds = if_not_exists(smartSeconds, :zero) + :smartSec,
+          goodCount = if_not_exists(goodCount, :zero) + :good,
+          lastSampleTs = :sampledAtSec,
+          lastIsOn = :isOn,
+          lastSmartMode = :smartMode
       `,
       ExpressionAttributeValues: {
+        ":zero": 0,
+        ":one": 1,
+        ":aqi": aqi,
+        ":peakAQI": peakAQI,
         ":onSec": onSeconds,
         ":smartSec": smartSeconds,
-        ":good": aqi <= 100 ? 1 : 0
-      }
+        ":good": aqi <= 100 ? 1 : 0,
+        ":sampledAtSec": sampledAtSec,
+        ":isOn": !!isOn,
+        ":smartMode": !!smartMode,
+      },
     })
   );
 }

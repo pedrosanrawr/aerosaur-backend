@@ -4,9 +4,11 @@
   "type": "module",
   "scripts": {
     "build": "sam build",
-    "deploy": "sam deploy --guided"
+    "deploy": "node scripts/sam-deploy.mjs",
+    "deploy:guided": "sam deploy --guided"
   },
   "dependencies": {
+    "@aws-sdk/client-iot-data-plane": "^3.0.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/lib-dynamodb": "^3.0.0",
     "axios": "^1.6.0",

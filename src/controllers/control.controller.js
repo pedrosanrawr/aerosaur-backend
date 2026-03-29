@@ -13,9 +13,9 @@ function handleError(err) {
   return json(statusCode, { message: err?.message || "Internal Server Error" });
 }
 
-export async function getControl(event) {
+export async function getControl(event, ctx) {
   try {
-    const userId = event.auth?.userId;
+    const userId = ctx.userId;
     const deviceId = event.pathParameters?.deviceId;
     if (!deviceId) return json(400, { message: "deviceId is required" });
 
@@ -26,9 +26,9 @@ export async function getControl(event) {
   }
 }
 
-export async function updateControl(event) {
+export async function updateControl(event, ctx) {
   try {
-    const userId = event.userId;
+    const userId = ctx.userId;
     const deviceId = event.pathParameters?.deviceId;
     if (!deviceId) return json(400, { message: "deviceId is required" });
 
