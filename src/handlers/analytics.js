@@ -1,14 +1,13 @@
 import { getAnalytics } from "../controllers/analytics.controller.js";
+import { withAuth } from "../middleware/auth.middleware.js";
+import { json } from "../lib/response.js";
 
-export const handler = async (event) => {
+export const handler = withAuth(async (event, ctx) => {
   try {
     const deviceId = event.pathParameters?.deviceId;
 
     if (!deviceId) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ message: "Missing deviceId" }),
-      };
+      return json(400, { message: "Missing deviceId" });
     }
 
     const path = event.rawPath || "";
@@ -18,16 +17,13 @@ export const handler = async (event) => {
       range = "today";
     }
 
-    return await getAnalytics(deviceId, range);
+    return await getAnalytics(deviceId, range, ctx.userId);
 
   } catch (error) {
     console.error("Analytics error:", error);
 
-    return {
-      statusCode: 500,
-      body: JSON.stringify({
-        message: "Analytics error"
-      }),
-    };
+    return json(error?.statusCode || 500, {
+      message: error?.message || "Analytics error",
+    });
   }
-};
+});

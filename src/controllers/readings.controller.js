@@ -17,6 +17,10 @@ export async function query(event, ctx) {
 export async function ingest(event) {
   const deviceId = event.pathParameters?.deviceId;
   const body = typeof event.body === "string" ? JSON.parse(event.body) : event.body;
-  const result = await ReadingsService.ingest({ deviceId, payload: body });
+  const result = await ReadingsService.ingest({
+    deviceId,
+    payload: body,
+    userId: event.userId,
+  });
   return json(result.status, result.body);
 }
