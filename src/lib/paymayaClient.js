@@ -10,7 +10,7 @@ export const publicAuthHeader = () => {
 };
 
 export const secretAuthHeader = () => {
-  const encoded = Buffer.from(`${process.env.PAYMAYA_SECRET_KEY}:`).toString('base64');
+  const encoded = Buffer.from(process.env.PAYMAYA_SECRET_KEY + ':').toString('base64');
   return `Basic ${encoded}`;
 };
 
