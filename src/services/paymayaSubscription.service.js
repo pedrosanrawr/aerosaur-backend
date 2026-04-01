@@ -7,7 +7,8 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
   const plan = getPlan(planId);
   const referenceId = uuidv4();
 
-  const { data } = await paymayaClient.post('/checkout', {
+  
+  const { data } = await paymayaClient.post('/checkouts', {
     totalAmount: {
       value:    plan.amount,
       currency: plan.currency,
@@ -41,21 +42,23 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
     amount:      plan.amount,
     currency:    plan.currency,
     status:      'PENDING',
-    checkoutUrl: data.redirectUrl,
+    checkoutUrl: data.checkoutUrl,
     createdAt:   new Date().toISOString(),
     updatedAt:   new Date().toISOString(),
+    expiresAt:   new Date(Date.now() + plan.durationDays * 24 * 60 * 60 * 1000).toISOString(),
   });
 
   return {
     checkoutId:  data.checkoutId,
-    checkoutUrl: data.redirectUrl,
+    checkoutUrl: data.checkoutUrl, 
     referenceId,
     plan,
   };
 };
 
 export const fetchAndSyncStatus = async (userId, paymentId) => {
-  const { data } = await paymayaClient.get(`/checkout/${paymentId}`, {
+  
+  const { data } = await paymayaClient.get(`/checkouts/${paymentId}`, {
     headers: { Authorization: secretAuthHeader() },
   });
 
@@ -75,7 +78,6 @@ export const getUserPremiumStatus = async (userId) => {
 
   if (!record) return { isPremium: false };
 
-  
   if (record.expiresAt) {
     const expired = new Date() > new Date(record.expiresAt);
     if (expired) {
@@ -88,13 +90,10 @@ export const getUserPremiumStatus = async (userId) => {
     isPremium:   record.status === 'ACTIVE',
     premiumPlan: record.planId || null,
     expiresAt:   record.expiresAt || null,
-  
     features: {
-      aiMonitoring:       true,   
-      aiInsights:         true,   
-      advancedControls:   true,  
+      aiMonitoring:     true,
+      aiInsights:       true,
+      advancedControls: true,
     },
   };
 };
-
-
