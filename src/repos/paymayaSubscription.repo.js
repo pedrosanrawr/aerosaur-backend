@@ -30,9 +30,11 @@ export const getActivePaymentByUserId = async (userId) => {
       ':userId': userId,
       ':status': 'ACTIVE',
     },
-    Limit: 1,
   }));
-  return result.Items?.[0] || null;
+
+  const items = result.Items || [];
+  items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return items[0] || null;
 };
 
 export const updatePaymentStatus = async (userId, paymentId, status, planId = null) => {
