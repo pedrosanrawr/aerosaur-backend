@@ -7,6 +7,8 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
   const plan = getPlan(planId);
   const referenceId = uuidv4();
 
+  //routing problema 
+
   const { data } = await paymayaClient.post('/checkouts', {
     totalAmount: {
       value:    plan.amount,
@@ -98,3 +100,7 @@ export const getUserPremiumStatus = async (userId) => {
     },
   };
 };
+ //
+ //
+ ///
+
