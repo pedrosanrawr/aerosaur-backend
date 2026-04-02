@@ -7,8 +7,6 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
   const plan = getPlan(planId);
   const referenceId = uuidv4();
 
-  //routing problema 
-
   const { data } = await paymayaClient.post('/checkouts', {
     totalAmount: {
       value:    plan.amount,
@@ -35,9 +33,6 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
     headers: { Authorization: publicAuthHeader() },
   });
 
-  // ✅ Log raw Maya response temporarily
-  console.log('Maya raw response:', JSON.stringify(data));
-
   await paymayaRepo.savePayment({
     userId,
     paymentId:   data.checkoutId,
@@ -46,7 +41,7 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
     amount:      plan.amount,
     currency:    plan.currency,
     status:      'PENDING',
-    checkoutUrl: data.redirectUrl,  
+    checkoutUrl: data.checkoutUrl,  
     createdAt:   new Date().toISOString(),
     updatedAt:   new Date().toISOString(),
     expiresAt:   new Date(Date.now() + plan.durationDays * 24 * 60 * 60 * 1000).toISOString(),
@@ -54,7 +49,7 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
 
   return {
     checkoutId:  data.checkoutId,
-    checkoutUrl: data.redirectUrl, 
+    checkoutUrl: data.checkoutUrl,
     referenceId,
     plan,
   };
@@ -100,7 +95,3 @@ export const getUserPremiumStatus = async (userId) => {
     },
   };
 };
- //
- //
- ///
-
