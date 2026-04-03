@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { paymayaClient, publicAuthHeader, secretAuthHeader } from '../lib/paymayaClient.js'; 
-import { getPlan } from '../lib/paymayaClient.js'; 
+import { getPlan } from '../lib/paymayaPlanConfig.js';
 import * as paymayaRepo from '../repos/paymayaSubscription.repo.js';
 
 export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrls }) => {
@@ -46,7 +46,7 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
     updatedAt:   new Date().toISOString(),
     expiresAt:   new Date(Date.now() + plan.durationDays * 24 * 60 * 60 * 1000).toISOString(),
   });
-
+//thispart is important 
   return {
     checkoutId:  data.checkoutId,
     checkoutUrl: data.checkoutUrl,
