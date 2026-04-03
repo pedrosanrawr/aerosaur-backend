@@ -81,4 +81,12 @@ export async function updateDailyStats(
       },
     })
   );
+
+  return {
+    date,
+    totalOnSeconds: (existing.totalOnSeconds || 0) + onSeconds,
+    smartSeconds: (existing.smartSeconds || 0) + smartSeconds,
+    peakAQI,
+    elapsedSec,
+  };
 }

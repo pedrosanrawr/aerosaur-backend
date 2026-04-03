@@ -2,7 +2,9 @@ import * as ReadingsRepo from "../repos/readings.repo.js";
 import * as DevicesRepo from "../repos/devices.repo.js";
 import * as AnalyticsRepo from "../repos/analytics.repo.js";
 import * as ControlRepo from "../repos/control.repo.js";
+import { withEffectiveConnectionStatus } from "./devices.service.js";
 import { publishCommand } from "../services/control.service.js";
+import * as NotificationsService from "../services/notifications.service.js";
 import { predictFanSpeed } from "../lib/smartmode.js";
 import { aqiCategory, aqiPercent, computeAQI } from "../lib/aqi.js";
 
@@ -56,9 +58,9 @@ export async function query({ deviceId, userId, from, to, limit }) {
   return { status: 200, body: { items } };
 }
 
-async function handleSmartMode(deviceId, aqi) {
+async function handleSmartMode(device, aqi) {
   try {
-    const control = await ControlRepo.getControl(deviceId);
+    const control = await ControlRepo.getControl(device.DeviceId);
     if (!control || !control.smartMode) return;
 
     const nowSec = Math.floor(Date.now() / 1000);
@@ -95,11 +97,11 @@ async function handleSmartMode(deviceId, aqi) {
 
     if (!Object.keys(patch).length) return;
 
-    const pub = await publishCommand(deviceId, patch, {
+    const pub = await publishCommand(device.DeviceId, patch, {
       source: "smart-mode-auto",
     });
 
-    await ControlRepo.upsertControl(deviceId, {
+    await ControlRepo.upsertControl(device.DeviceId, {
       ...control,
       ...patch,
       lastCmdId: pub.cmdId ?? null,
@@ -107,7 +109,13 @@ async function handleSmartMode(deviceId, aqi) {
       lastSmartUpdateSec: nowSec,
     });
 
-    console.log("SMART MODE AUTO:", { deviceId, aqi, patch });
+    await NotificationsService.emitSmartModeNotification({
+      device,
+      patch,
+      aqi,
+    });
+
+    console.log("SMART MODE AUTO:", { deviceId: device.DeviceId, aqi, patch });
 
   } catch (err) {
     console.error("Smart mode auto error:", err);
@@ -115,9 +123,16 @@ async function handleSmartMode(deviceId, aqi) {
 }
 
 export async function ingest({ deviceId, payload, userId = null }) {
+  const rawDevice = await DevicesRepo.getDeviceById(deviceId);
+  const device = withEffectiveConnectionStatus(rawDevice);
+  if (!device) {
+    return { status: 404, body: { message: "Device not found" } };
+  }
+
   if (userId) {
-    const access = await ensureDeviceAccess(deviceId, userId);
-    if (!access.ok) return { status: access.status, body: access.body };
+    if (device.ownerUserId !== userId) {
+      return { status: 403, body: { message: "Forbidden" } };
+    }
   }
 
   const now = new Date();
@@ -174,7 +189,7 @@ export async function ingest({ deviceId, payload, userId = null }) {
     await ReadingsRepo.putLatestItem(next);
   }
 
-  await handleSmartMode(deviceId, next.aqi);
+  await handleSmartMode(device, next.aqi);
 
   try {
     await DevicesRepo.updateConnectionStatus(deviceId, {
@@ -205,14 +220,35 @@ export async function ingest({ deviceId, payload, userId = null }) {
     false;
 
   try {
-    await AnalyticsRepo.updateDailyStats(deviceId, date, {
+    const analytics = await AnalyticsRepo.updateDailyStats(deviceId, date, {
       aqi: aqiSmooth,
       isOn: fanOn,
       smartMode,
       sampledAtSec: nowSec,
     });
+
+    const prevOnSeconds = (analytics.totalOnSeconds || 0) - (analytics.elapsedSec || 0);
+    const crossedHighUsage = prevOnSeconds < 8 * 3600 && analytics.totalOnSeconds >= 8 * 3600;
+
+    if (crossedHighUsage) {
+      await NotificationsService.emitEnergyNotification({
+        device,
+        totalOnSeconds: analytics.totalOnSeconds,
+      });
+    }
   } catch (err) {
     console.warn("Daily analytics update failed:", err.message);
+  }
+
+  try {
+    await NotificationsService.emitTelemetryNotifications({
+      device,
+      previousReading: prev,
+      latestReading: next,
+      previousOnline: device.online ?? null,
+    });
+  } catch (err) {
+    console.warn("Telemetry notification emit failed:", err.message);
   }
 
   return {

@@ -5,7 +5,7 @@ export function json(statusCode, body) {
       "content-type": "application/json",
       "access-control-allow-origin": "*",
       "access-control-allow-headers": "Content-Type,Authorization",
-      "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
+      "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     },
     body: JSON.stringify(body),
   };

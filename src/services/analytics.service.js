@@ -1,6 +1,29 @@
 import * as repo from "../repos/analytics.repo.js";
 import * as DevicesRepo from "../repos/devices.repo.js";
 
+const ANALYTICS_TIME_ZONE = "Asia/Manila";
+
+function formatLocalDate(date) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ANALYTICS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  return formatter.format(date);
+}
+
+function startOfLocalDay(date) {
+  return new Date(`${formatLocalDate(date)}T00:00:00`);
+}
+
+function dayNameFromLocalDate(dateText) {
+  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const [year, month, day] = dateText.split("-").map(Number);
+  return dayNames[new Date(year, month - 1, day).getDay()];
+}
+
 async function ensureDeviceAccess(deviceId, userId) {
   const device = await DevicesRepo.getDeviceById(deviceId);
 
@@ -17,12 +40,14 @@ function getStartDate(range) {
   const now = new Date();
 
   if (range === "7d") {
-    now.setDate(now.getDate() - 6);
+    const start = startOfLocalDay(now);
+    start.setDate(start.getDate() - 6);
+    return formatLocalDate(start);
   } else if (range === "today") {
-    now.setHours(0, 0, 0, 0);
+    return formatLocalDate(now);
   }
 
-  return now.toISOString().slice(0, 10);
+  return formatLocalDate(now);
 }
 
 export async function getAnalytics({ deviceId, range, userId }) {
@@ -36,19 +61,16 @@ export async function getAnalytics({ deviceId, range, userId }) {
 }
 
 function computeFromDaily(rows, range) {
-
-  const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
-  const today = new Date();
+  const today = startOfLocalDay(new Date());
   const days = [];
 
   if (range === "today") {
-    days.push(today.toISOString().slice(0, 10));
+    days.push(formatLocalDate(today));
   } else {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
-      days.push(d.toISOString().slice(0, 10));
+      days.push(formatLocalDate(d));
     }
   }
 
@@ -59,10 +81,12 @@ function computeFromDaily(rows, range) {
 
   const aqiTrend = [];
   const usageTrend = [];
+  let totalUsageHours7d = 0;
 
   days.forEach(date => {
 
     const r = rowMap[date] || {};
+    const usageHours = Number(((r.totalOnSeconds || 0) / 3600).toFixed(1));
 
     const avgAQI =
       !r.totalCount
@@ -77,9 +101,11 @@ function computeFromDaily(rows, range) {
 
     usageTrend.push({
       date,
-      day: dayNames[new Date(date).getDay()],
-      hours: Number(((r.totalOnSeconds || 0) / 3600).toFixed(1))
+      day: dayNameFromLocalDate(date),
+      hours: usageHours
     });
+
+    totalUsageHours7d += usageHours;
 
   });
 
@@ -111,6 +137,7 @@ function computeFromDaily(rows, range) {
     summary: {
       aqiAverageToday,
       aqiPeakToday,
+      totalUsageHours7d: Number(totalUsageHours7d.toFixed(1)),
       goodPercentage,
       directHoursToday,
       energySavedPercent

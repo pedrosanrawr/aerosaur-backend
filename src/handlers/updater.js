@@ -1,5 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import * as DevicesRepo from "../repos/devices.repo.js";
+import * as NotificationsService from "../services/notifications.service.js";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const DEVICES_TABLE = process.env.DEVICES_TABLE;
@@ -15,6 +17,7 @@ export const handler = async (event) => {
 
   const lastSeen = new Date().toISOString();
   const online = msg.online !== false;
+  const before = await DevicesRepo.getById(deviceId);
 
   await ddb.send(
     new UpdateCommand({
@@ -27,6 +30,17 @@ export const handler = async (event) => {
       },
     })
   );
+
+  if (before && before.ownerUserId && before.online !== online) {
+    try {
+      await NotificationsService.emitDeviceConnectivityNotification({
+        device: { ...before, online, lastSeen },
+        online,
+      });
+    } catch (err) {
+      console.warn("Device connectivity notification failed:", err.message);
+    }
+  }
 
   console.log("Updated connection:", { deviceId, online, lastSeen });
 };

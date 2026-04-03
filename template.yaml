@@ -29,6 +29,8 @@ Globals:
         PAYMAYA_WEBHOOK_SECRET: !Ref PaymayaWebhookSecret
         PAYMAYA_ENV: !Ref PaymayaEnv
         APP_URL: !Ref AppUrl
+        DEVICE_ONLINE_TIMEOUT_MS: 120000
+        DEVICE_OFFLINE_SWEEP_BATCH_SIZE: 100
     LoggingConfig:
       LogFormat: JSON
 
@@ -73,7 +75,7 @@ Resources:
       CorsConfiguration:
         AllowOrigins: ["*"]
         AllowHeaders: ["*"]
-        AllowMethods: ["GET","POST","PUT","DELETE","OPTIONS"]
+        AllowMethods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"]
 
   # -------------------------
   # DynamoDB Tables
@@ -306,6 +308,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref DevicesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NotificationsTable
 
   ReadingsFunction:
     Type: AWS::Serverless::Function
@@ -316,6 +320,17 @@ Resources:
             TableName: !Ref ReadingsTable
         - DynamoDBReadPolicy:
             TableName: !Ref DevicesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NotificationsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DailyAnalyticsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ControlTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - iot:Publish
+              Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/devices/*/cmd"
       Events:
         LatestReading:
           Type: HttpApi
@@ -369,6 +384,13 @@ Resources:
             TableName: !Ref DailyAnalyticsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ControlTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NotificationsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - iot:Publish
+              Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/devices/*/cmd"
 
   ControlFunction:
     Type: AWS::Serverless::Function
@@ -442,6 +464,30 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /notifications
             Method: GET
+        UpdateNotificationSettings:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /notifications/settings
+            Method: PATCH
+        RegisterPushToken:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /notifications/tokens
+            Method: POST
+        DeletePushToken:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /notifications/tokens
+            Method: DELETE
+        CreateNotification:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /notifications
+            Method: POST
         MarkAllRead:
           Type: HttpApi
           Properties:
@@ -452,7 +498,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /notifications/{createdAt}/read
+            Path: /notifications/{notificationId}/read
             Method: POST
         ClearAll:
           Type: HttpApi
@@ -460,6 +506,24 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /notifications/clear-all
             Method: DELETE
+
+  DeviceOfflineWatcherFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/deviceofflinewatcher.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DevicesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NotificationsTable
+      Events:
+        DeviceOfflineSweep:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 minute)
+            Name: !Sub "${AWS::StackName}-device-offline-sweep"
+            Description: Mark stale devices offline and send notifications
+            Enabled: true
 
   AnalyticsFunction:
     Type: AWS::Serverless::Function
