@@ -33,8 +33,6 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
     headers: { Authorization: publicAuthHeader() },
   });
 
-  console.log('Maya raw response:', JSON.stringify(data));
-
   await paymayaRepo.savePayment({
     userId,
     paymentId:   data.checkoutId,
@@ -43,7 +41,7 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
     amount:      plan.amount,
     currency:    plan.currency,
     status:      'PENDING',
-    checkoutUrl: data.checkoutUrl,  
+    checkoutUrl: data.redirectUrl,  
     createdAt:   new Date().toISOString(),
     updatedAt:   new Date().toISOString(),
     expiresAt:   new Date(Date.now() + plan.durationDays * 24 * 60 * 60 * 1000).toISOString(),
@@ -51,7 +49,7 @@ export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrl
 
   return {
     checkoutId:  data.checkoutId,
-    checkoutUrl: data.checkoutUrl,
+    checkoutUrl: data.redirectUrl, 
     referenceId,
     plan,
   };
