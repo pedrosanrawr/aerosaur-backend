@@ -1,7 +1,9 @@
 import admin from "firebase-admin";
 
-function initFirebaseAdmin(serviceJson) {
-  if (admin.apps.length) return;
+export function ensureFirebaseAdmin(serviceJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  if (admin.apps.length) return admin;
+
+  if (!serviceJson) throw new Error("Missing env FIREBASE_SERVICE_ACCOUNT_JSON");
 
   const raw = JSON.parse(serviceJson);
 
@@ -13,6 +15,8 @@ function initFirebaseAdmin(serviceJson) {
     credential: admin.credential.cert(raw),
     projectId: raw.project_id,
   });
+
+  return admin;
 }
 
 export async function verifyBearerAuthHeader(authHeader) {
@@ -20,9 +24,6 @@ export async function verifyBearerAuthHeader(authHeader) {
   const token = match ? match[1] : null;
   if (!token) throw new Error("Missing Authorization Bearer token");
 
-  const serviceJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!serviceJson) throw new Error("Missing env FIREBASE_SERVICE_ACCOUNT_JSON");
-
-  initFirebaseAdmin(serviceJson);
+  ensureFirebaseAdmin();
   return await admin.auth().verifyIdToken(token);
-} 
+}

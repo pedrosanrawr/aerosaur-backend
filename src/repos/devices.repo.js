@@ -5,6 +5,7 @@ import {
   PutCommand,
   UpdateCommand,
   QueryCommand,
+  ScanCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { DEVICES_TABLE } from "../config/env.js";
 
@@ -30,6 +31,28 @@ export async function listByOwner(userId) {
     })
   );
   return res.Items ?? [];
+}
+
+export async function listOnlineDevices({ limit = 100, cursor } = {}) {
+  const res = await ddb.send(
+    new ScanCommand({
+      TableName: DEVICES_TABLE,
+      Limit: limit,
+      ExclusiveStartKey: cursor,
+      FilterExpression: "#on = :true AND attribute_exists(ownerUserId)",
+      ExpressionAttributeNames: {
+        "#on": "online",
+      },
+      ExpressionAttributeValues: {
+        ":true": true,
+      },
+    })
+  );
+
+  return {
+    items: res.Items ?? [],
+    cursor: res.LastEvaluatedKey ?? null,
+  };
 }
 
 export async function createProvisionedDevice({
@@ -123,6 +146,34 @@ export async function updateConnectionStatus(deviceId, { online, lastSeen }) {
     })
   );
   return res.Attributes;
+}
+
+export async function markOfflineIfOnline(deviceId) {
+  try {
+    const res = await ddb.send(
+      new UpdateCommand({
+        TableName: DEVICES_TABLE,
+        Key: { DeviceId: deviceId },
+        ConditionExpression: "#on = :true",
+        UpdateExpression: "SET #on = :false",
+        ExpressionAttributeNames: {
+          "#on": "online",
+        },
+        ExpressionAttributeValues: {
+          ":true": true,
+          ":false": false,
+        },
+        ReturnValues: "ALL_NEW",
+      })
+    );
+
+    return res.Attributes ?? null;
+  } catch (err) {
+    if (err?.name === "ConditionalCheckFailedException") {
+      return null;
+    }
+    throw err;
+  }
 }
 
 export async function getDeviceById(deviceId) {

@@ -1,36 +1,34 @@
-import express from 'express';
-import { ok } from "../lib/response.js";
-import * as controller from "./notification.controller.js";
+import { withAuth } from "../middleware/auth.middleware.js";
+import { json } from "../lib/response.js";
+import * as NotificationsController from "../controllers/notifications.controller.js";
 
-const router = express.Router();
+export const handler = withAuth(async (event, ctx) => {
+  switch (event.routeKey) {
+    case "GET /notifications":
+      return NotificationsController.listNotifications(event, ctx);
 
-export const handler = async (req, res, next) => {
-  try {
-    const { method, path } = req;
-    let result;
+    case "PATCH /notifications/settings":
+      return NotificationsController.updateSettings(event, ctx);
 
-    
-    if (method === 'GET' && path === '/') {
-      result = await controller.fetchAll(req);
-    } 
-    else if (method === 'PATCH' && path === '/settings') {
-      result = await controller.patchSettings(req);
-    }
+    case "POST /notifications/tokens":
+      return NotificationsController.registerPushToken(event, ctx);
 
-  
-    return ok(res, {
-      status: "ok",
-      service: "aerosaur-notification-service",
-      timestamp: new Date().toISOString(),
-      data: result
-    });
+    case "DELETE /notifications/tokens":
+      return NotificationsController.unregisterPushToken(event, ctx);
 
-  } catch (error) {
-    next(error); 
+    case "POST /notifications":
+      return NotificationsController.createNotification(event, ctx);
+
+    case "POST /notifications/mark-all-read":
+      return NotificationsController.markAllAsRead(event, ctx);
+
+    case "POST /notifications/{notificationId}/read":
+      return NotificationsController.markAsRead(event, ctx);
+
+    case "DELETE /notifications/clear-all":
+      return NotificationsController.clearAll(event, ctx);
+
+    default:
+      return json(404, { message: "Route not found", routeKey: event.routeKey });
   }
-};
-
-router.get('/', handler);
-router.patch('/settings', handler);
-
-export default router;
+});
