@@ -1,11 +1,11 @@
 const PLANS = {
-  PREMIUM_MONTHLY: {
-    planId:      'PREMIUM_MONTHLY',
-    name:        'Premium Monthly',
-    description: 'Full access to all premium features for 1 month',
-    amount:      9.99,
+  PREMIUM_QUARTERLY: {
+    planId:      'PREMIUM_QUARTERLY',
+    name:        'Premium Quarterly',
+    description: 'Full access to all premium features for 3 month',
+    amount:      149.99,
     currency:    'PHP',
-    durationDays: 30,
+    durationDays: 92,
   },
 };
 
