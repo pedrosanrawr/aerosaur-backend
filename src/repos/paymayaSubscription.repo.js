@@ -1,5 +1,6 @@
 import { ddb } from '../lib/paymayaDynamoDBCLient.js';
 import { PutCommand, GetCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { getPlan } from '../lib/paymayaPlanConfig.js';
 
 const PAYMAYA_TABLE = process.env.PAYMAYA_TABLE;
 
@@ -38,15 +39,26 @@ export const getActivePaymentByUserId = async (userId) => {
 };
 
 export const updatePaymentStatus = async (userId, paymentId, status, planId = null) => {
+  let expiresAt = null;
+  if (status === 'ACTIVE' && planId) {
+    try {
+      const plan = getPlan(planId);
+      expiresAt = new Date(Date.now() + plan.durationDays * 24 * 60 * 60 * 1000).toISOString();
+    } catch (e) {
+      console.warn('Could not calculate expiresAt for planId:', planId);
+    }
+  }
+
   await ddb.send(new UpdateCommand({
     TableName: PAYMAYA_TABLE,
     Key: { userId, paymentId },
-    UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt, planId = :planId',
+    UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt, planId = :planId, expiresAt = :expiresAt',
     ExpressionAttributeNames: { '#status': 'status' },
     ExpressionAttributeValues: {
       ':status':    status,
       ':updatedAt': new Date().toISOString(),
       ':planId':    planId,
+      ':expiresAt': expiresAt,
     },
   }));
 };
