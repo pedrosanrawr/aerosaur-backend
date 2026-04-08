@@ -4,18 +4,26 @@ import * as billingRepo from '../repos/billing.repo.js';
 export async function createSubscription(req, res) {
   try {
     const { planId, userId } = req.body;
+    const finalPlanId = planId || process.env.PAYPAL_PLAN_ID;
 
-    if (!planId || !userId) {
-      return res.status(400).json({ error: 'planId and userId are required' });
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
     }
 
-    const subscription = await billingService.createSubscription(planId, userId);
+    if (!finalPlanId) {
+      return res.status(500).json({ error: 'PayPal plan is not configured' });
+    }
+
+    const subscription = await billingService.createSubscription(
+      finalPlanId,
+      userId
+    );
     const approvalUrl = subscription.links.find((l) => l.rel === 'approve').href;
 
     await billingRepo.saveSubscription(
       userId,
       subscription.id,
-      planId,
+      finalPlanId,
       'PENDING',
       approvalUrl
     );
@@ -44,7 +52,7 @@ export async function getSubscription(req, res) {
     return res.status(200).json({
       subscriptionId: record.subscriptionId,
       status: liveData.status,
-      nextBillingTime: liveData.billing_info?.next_billing_time,
+      nextBillingTime: liveData.billing_info?.next_billing_time || record.expiresAt,
       planId: record.planId,
     });
   } catch (error) {
@@ -60,10 +68,22 @@ export async function cancelSubscription(req, res) {
 
     if (!record) return res.status(404).json({ error: 'No subscription found' });
 
-    await billingService.cancelSubscription(record.subscriptionId);
-    await billingRepo.updateSubscriptionStatus(userId, record.subscriptionId, 'CANCELLED');
+    const liveData = await billingService.getSubscription(record.subscriptionId);
+    const currentPeriodEndsAt = liveData.billing_info?.next_billing_time || null;
 
-    return res.status(200).json({ message: 'Subscription cancelled successfully' });
+    await billingService.cancelSubscription(record.subscriptionId);
+    await billingRepo.updateSubscriptionStatus(
+      userId,
+      record.subscriptionId,
+      'CANCELLED',
+      currentPeriodEndsAt
+    );
+
+    return res.status(200).json({
+      message: 'Subscription cancelled successfully',
+      accessEndsAt: currentPeriodEndsAt,
+      refundable: false,
+    });
   } catch (error) {
     console.error('cancelSubscription error:', error.message);
     return res.status(500).json({ error: 'Failed to cancel subscription' });

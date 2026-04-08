@@ -1,6 +1,6 @@
 import * as DevicesRepo from "../repos/devices.repo.js";
 import * as NotificationsService from "./notifications.service.js";
-import { publishFactoryReset } from "../lib/iot.js";
+import { publishCommand } from "./control.service.js";
 import QRCode from "qrcode";
 
 const DEFAULT_DEVICE_ONLINE_TIMEOUT_MS = 2 * 60 * 1000;
@@ -156,16 +156,23 @@ export async function unregisterMyDevice(userId, deviceId) {
   if (!device) return null;
   if (device.ownerUserId !== userId) forbidden("Device not owned by user");
 
-  const updated = await DevicesRepo.unbindOwner(deviceId, userId);
-
   try {
-    await publishFactoryReset(deviceId);
+    await publishCommand(
+      deviceId,
+      { clearWifiCredentials: true },
+      {
+        requestedBy: userId,
+        reason: "unregistered",
+      }
+    );
   } catch (e) {
-    console.log("Factory reset publish failed:", {
+    console.log("Clear Wi-Fi credentials publish failed:", {
       deviceId,
       err: e?.message || String(e),
     });
   }
+
+  const updated = await DevicesRepo.unbindOwner(deviceId, userId);
 
   return withEffectiveConnectionStatus(updated);
 }

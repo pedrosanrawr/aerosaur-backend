@@ -25,7 +25,17 @@ app.post('/billing/webhook', verifyWebhookSignature, async (req, res) => {
         await billingRepo.updateSubscriptionStatus(event.resource.custom_id, event.resource.id, 'ACTIVE');
         break;
       case 'BILLING.SUBSCRIPTION.CANCELLED':
-        await billingRepo.updateSubscriptionStatus(event.resource.custom_id, event.resource.id, 'CANCELLED');
+        {
+          const record = await billingRepo.getSubscriptionByUserId(
+            event.resource.custom_id
+          );
+          await billingRepo.updateSubscriptionStatus(
+            event.resource.custom_id,
+            event.resource.id,
+            'CANCELLED',
+            record?.expiresAt || null
+          );
+        }
         break;
       case 'BILLING.SUBSCRIPTION.PAYMENT.FAILED':
         await billingRepo.updateSubscriptionStatus(event.resource.custom_id, event.resource.id, 'PAYMENT_FAILED');

@@ -10,7 +10,7 @@ export async function requirePaymayaPremium(req, res, next) {
 
     const subscription = await paymayaRepo.getActivePaymentByUserId(userId);
 
-    if (!subscription || subscription.status !== 'ACTIVE') {
+    if (!subscription) {
       return res.status(403).json({
         error: 'Premium subscription required',
         message: 'Please subscribe to access AI monitoring features'
@@ -25,6 +25,14 @@ export async function requirePaymayaPremium(req, res, next) {
           message: 'Your premium subscription has expired. Please renew to continue.'
         });
       }
+    }
+
+    const status = (subscription.status || '').toUpperCase();
+    if (status !== 'ACTIVE' && status !== 'CANCELLED') {
+      return res.status(403).json({
+        error: 'Premium subscription required',
+        message: 'Please subscribe to access AI monitoring features'
+      });
     }
 
     next();
