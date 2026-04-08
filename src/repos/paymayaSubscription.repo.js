@@ -4,6 +4,27 @@ import { getPlan } from '../lib/paymayaPlanConfig.js';
 
 const PAYMAYA_TABLE = process.env.PAYMAYA_TABLE;
 
+const timeValue = (value) => {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const statusScore = (item) => {
+  switch ((item?.status || '').toUpperCase()) {
+    case 'ACTIVE':
+      return 5;
+    case 'CANCELLED':
+      return item?.expiresAt && timeValue(item.expiresAt) > Date.now() ? 4 : 2;
+    case 'PENDING':
+      return 3;
+    case 'FAILED':
+    case 'EXPIRED':
+    default:
+      return 0;
+  }
+};
+
 export const savePayment = async (item) => {
   await ddb.send(new PutCommand({
     TableName: PAYMAYA_TABLE,
@@ -25,21 +46,28 @@ export const getActivePaymentByUserId = async (userId) => {
   const result = await ddb.send(new QueryCommand({
     TableName: PAYMAYA_TABLE,
     KeyConditionExpression: 'userId = :userId',
-    FilterExpression: '#status = :status',
-    ExpressionAttributeNames: { '#status': 'status' },
     ExpressionAttributeValues: {
       ':userId': userId,
-      ':status': 'ACTIVE',
     },
   }));
 
   const items = result.Items || [];
-  items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  items.sort((a, b) => {
+    const statusDelta = statusScore(b) - statusScore(a);
+    if (statusDelta !== 0) return statusDelta;
+
+    const updatedDelta = timeValue(b.updatedAt) - timeValue(a.updatedAt);
+    if (updatedDelta !== 0) return updatedDelta;
+
+    return timeValue(b.createdAt) - timeValue(a.createdAt);
+  });
   return items[0] || null;
 };
 
 export const updatePaymentStatus = async (userId, paymentId, status, planId = null) => {
-  let expiresAt = null;
+  const current = await getPaymentByUserAndId(userId, paymentId);
+  let expiresAt = current?.expiresAt || null;
+
   if (status === 'ACTIVE' && planId) {
     try {
       const plan = getPlan(planId);
@@ -47,6 +75,8 @@ export const updatePaymentStatus = async (userId, paymentId, status, planId = nu
     } catch (e) {
       console.warn('Could not calculate expiresAt for planId:', planId);
     }
+  } else if (status === 'EXPIRED' || status === 'FAILED') {
+    expiresAt = null;
   }
 
   await ddb.send(new UpdateCommand({
@@ -57,7 +87,7 @@ export const updatePaymentStatus = async (userId, paymentId, status, planId = nu
     ExpressionAttributeValues: {
       ':status':    status,
       ':updatedAt': new Date().toISOString(),
-      ':planId':    planId,
+      ':planId':    planId ?? current?.planId ?? null,
       ':expiresAt': expiresAt,
     },
   }));

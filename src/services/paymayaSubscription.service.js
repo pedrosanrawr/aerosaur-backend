@@ -3,6 +3,21 @@ import { paymayaClient, publicAuthHeader, secretAuthHeader } from '../lib/paymay
 import { getPlan } from '../lib/paymayaPlanConfig.js';
 import * as paymayaRepo from '../repos/paymayaSubscription.repo.js';
 
+const normalizePaymayaStatus = (status) => {
+  switch ((status || '').toUpperCase()) {
+    case 'PAYMENT_SUCCESS':
+      return 'ACTIVE';
+    case 'PAYMENT_FAILED':
+      return 'FAILED';
+    case 'PAYMENT_EXPIRED':
+      return 'EXPIRED';
+    case 'VOID':
+      return 'CANCELLED';
+    default:
+      return (status || '').toUpperCase();
+  }
+};
+
 export const createPremiumCheckout = async ({ userId, planId, buyer, redirectUrls }) => {
   const plan = getPlan(planId);
   const referenceId = uuidv4();
@@ -60,11 +75,13 @@ export const fetchAndSyncStatus = async (userId, paymentId) => {
     headers: { Authorization: secretAuthHeader() },
   });
 
-  await paymayaRepo.updatePaymentStatus(userId, paymentId, data.status);
+  const normalizedStatus = normalizePaymayaStatus(data.status);
+  await paymayaRepo.updatePaymentStatus(userId, paymentId, normalizedStatus);
 
   return {
     paymentId,
-    status:        data.status,
+    status:        normalizedStatus,
+    rawStatus:     data.status,
     amount:        data.totalAmount,
     transactionId: data.transactionReferenceNumber,
     paymentMethod: data.paymentScheme,
@@ -84,14 +101,40 @@ export const getUserPremiumStatus = async (userId) => {
     }
   }
 
+  const status = (record.status || '').toUpperCase();
+
   return {
-    isPremium:   record.status === 'ACTIVE',
+    isPremium:   status === 'ACTIVE' || status === 'CANCELLED',
     premiumPlan: record.planId || null,
     expiresAt:   record.expiresAt || null,
+    status,
     features: {
       aiMonitoring:     true,
       aiInsights:       true,
       advancedControls: true,
     },
+  };
+};
+
+export const cancelPremiumAccess = async (userId) => {
+  const record = await paymayaRepo.getActivePaymentByUserId(userId);
+
+  if (!record) {
+    const error = new Error('No active premium payment found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  await paymayaRepo.updatePaymentStatus(
+    userId,
+    record.paymentId,
+    'CANCELLED',
+    record.planId
+  );
+
+  return {
+    message: 'Premium auto-renew cancelled successfully',
+    accessEndsAt: record.expiresAt || null,
+    refundable: false,
   };
 };

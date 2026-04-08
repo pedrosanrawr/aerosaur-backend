@@ -5,13 +5,14 @@ import * as ControlRepo from "../repos/control.repo.js";
 import { withEffectiveConnectionStatus } from "./devices.service.js";
 import { publishCommand } from "../services/control.service.js";
 import * as NotificationsService from "../services/notifications.service.js";
-import { predictFanSpeed } from "../lib/smartmode.js";
+import { buildSmartModePatch } from "../lib/smartmode.js";
 import { aqiCategory, aqiPercent, computeAQI } from "../lib/aqi.js";
 
 const AQI_DEADBAND = 5;
 const FORCE_INTERVAL_SEC = 60;
 const EMA_ALPHA = 0.25;
 const SMART_MODE_COOLDOWN_SEC = 30;
+const MANUAL_OVERRIDE_COOLDOWN_MS = 2 * 60 * 1000;
 
 function ema(prev, next, alpha) {
   if (prev == null) return next;
@@ -32,6 +33,38 @@ function shouldUpdateDisplay(prev, next, nowSec) {
   if (diff >= AQI_DEADBAND) return true;
 
   return false;
+}
+
+function normalizePayloadFanSpeed(payload) {
+  if ("fanSpeed" in payload && payload?.fanSpeed != null) {
+    const normalized = String(payload.fanSpeed).toUpperCase();
+    return normalized === "OFF" ? "OFF" : normalized;
+  }
+
+  if (!("fan_speed" in payload)) return null;
+
+  const numeric = Number(payload?.fan_speed);
+  if (!Number.isFinite(numeric)) return null;
+  if (numeric <= 0) return "OFF";
+  if (numeric >= 60) return "FAST";
+  if (numeric >= 41) return "MODERATE";
+  if (numeric >= 40) return "SLOW";
+  return null;
+}
+
+function parseReportedBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "on", "enabled", "active"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "off", "disabled", "inactive"].includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
 }
 
 async function ensureDeviceAccess(deviceId, userId) {
@@ -63,6 +96,13 @@ async function handleSmartMode(device, aqi) {
     const control = await ControlRepo.getControl(device.DeviceId);
     if (!control || !control.smartMode) return;
 
+    if (
+      control.lastManualOverrideAt &&
+      Date.now() - Number(control.lastManualOverrideAt) < MANUAL_OVERRIDE_COOLDOWN_MS
+    ) {
+      return;
+    }
+
     const nowSec = Math.floor(Date.now() / 1000);
 
     if (
@@ -72,21 +112,12 @@ async function handleSmartMode(device, aqi) {
       return;
     }
 
+
     let patch = {};
-
-    const predictedSpeed = predictFanSpeed(aqi);
-
-    if (control.autoAdjust) {
-      patch.fanSpeed = predictedSpeed;
-    }
-
-    if (control.autoOff) {
-      if (aqi <= 20) {
-        patch.power = false;
-      } else {
-        patch.power = true;
-      }
-    }
+    patch = buildSmartModePatch({
+      aqi,
+      control,
+    });
 
     if (
       (patch.fanSpeed === undefined || patch.fanSpeed === control.fanSpeed) &&
@@ -208,9 +239,50 @@ export async function ingest({ deviceId, payload, userId = null }) {
     console.warn("Control fetch failed:", err.message);
   }
 
+  const reportedPatch = {};
+  const reportedPower = parseReportedBoolean(payload?.power);
+  if ("power" in (payload ?? {}) && reportedPower !== null) {
+    reportedPatch.reportedPower = reportedPower;
+  }
+
+  const reportedFanSpeed = normalizePayloadFanSpeed(payload ?? {});
+  if (reportedFanSpeed) {
+    reportedPatch.reportedFanSpeed = reportedFanSpeed;
+  }
+
+  const reportedSmartMode = parseReportedBoolean(payload?.smartMode);
+  if ("smartMode" in (payload ?? {}) && reportedSmartMode !== null) {
+    reportedPatch.reportedSmartMode = reportedSmartMode;
+  }
+
+  const reportedAutoAdjust = parseReportedBoolean(payload?.autoAdjust);
+  if ("autoAdjust" in (payload ?? {}) && reportedAutoAdjust !== null) {
+    reportedPatch.reportedAutoAdjust = reportedAutoAdjust;
+  }
+
+  const reportedAutoOff = parseReportedBoolean(payload?.autoOff);
+  if ("autoOff" in (payload ?? {}) && reportedAutoOff !== null) {
+    reportedPatch.reportedAutoOff = reportedAutoOff;
+  }
+
+  if (Object.keys(reportedPatch).length) {
+    try {
+      control = await ControlRepo.upsertControl(deviceId, {
+        ...(control ?? {}),
+        ...reportedPatch,
+      });
+    } catch (err) {
+      console.warn("Control mirror update failed:", err.message);
+    }
+  }
+
   const fanOn =
     payload?.power ??
-    (payload?.fan_speed !== undefined ? payload.fan_speed > 0 : undefined) ??
+    (
+      payload?.fan_speed !== undefined
+        ? payload.fan_speed > 0
+        : undefined
+    ) ??
     control?.power ??
     false;
 

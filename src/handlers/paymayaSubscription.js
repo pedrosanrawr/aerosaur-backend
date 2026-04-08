@@ -12,25 +12,39 @@ app.use(express.json({
   }
 }));
 
+function normalizeBuyerPayload(buyer = {}) {
+  const firstName = `${buyer?.firstName || ''}`.trim() || 'Aerosaur';
+  const lastName = `${buyer?.lastName || ''}`.trim() || 'User';
+  const email = `${buyer?.contact?.email || ''}`.trim() || 'unknown@aerosaur.app';
+
+  return {
+    ...buyer,
+    firstName,
+    lastName,
+    contact: {
+      ...(buyer?.contact || {}),
+      email,
+    },
+  };
+}
+
 // ─────────────────────────────────────────
 // POST /paymaya/checkout
 // ─────────────────────────────────────────
 app.post('/paymaya/checkout', async (req, res) => {
   try {
     const { userId, planId, buyer, redirectUrls } = req.body;
+    const finalPlanId = planId || 'PREMIUM_QUARTERLY';
+    const normalizedBuyer = normalizeBuyerPayload(buyer);
 
-    if (!userId || !planId) {
-      return res.status(400).json({ error: 'userId and planId are required' });
-    }
-
-    if (!buyer?.firstName || !buyer?.lastName || !buyer?.contact?.email) {
-      return res.status(400).json({ error: 'buyer firstName, lastName and email are required' });
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
     }
 
     const result = await paymayaService.createPremiumCheckout({
       userId,
-      planId,
-      buyer,
+      planId: finalPlanId,
+      buyer: normalizedBuyer,
       redirectUrls,
     });
 
@@ -80,6 +94,20 @@ app.get('/paymaya/premium/:userId', async (req, res) => {
   } catch (error) {
     console.error('getPremiumStatus error:', error.message);
     return res.status(500).json({ error: 'Failed to get premium status' });
+  }
+});
+
+app.delete('/paymaya/premium/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await paymayaService.cancelPremiumAccess(userId);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('cancelPremium error:', error.message);
+    if (error.statusCode === 404) {
+      return res.status(404).json({ error: error.message });
+    }
+    return res.status(500).json({ error: 'Failed to cancel premium access' });
   }
 });
 

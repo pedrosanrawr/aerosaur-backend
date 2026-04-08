@@ -42,8 +42,8 @@ export async function createSubscription(planId, userId) {
     application_context: {
       brand_name: 'Aerosaur',
       user_action: 'SUBSCRIBE_NOW',
-      return_url: `https://aerosaur.com/billing/success?userId=${userId}`,
-      cancel_url: `https://aerosaur.com/billing/cancel?userId=${userId}`,
+      return_url: `aerosaur://billing/success?provider=paypal&userId=${userId}`,
+      cancel_url: `aerosaur://billing/cancel?provider=paypal&userId=${userId}`,
     },
     custom_id: userId,
   });
