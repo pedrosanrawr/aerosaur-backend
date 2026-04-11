@@ -6,19 +6,13 @@ import { withEffectiveConnectionStatus } from "./devices.service.js";
 import { publishCommand } from "../services/control.service.js";
 import * as NotificationsService from "../services/notifications.service.js";
 import { buildSmartModePatch } from "../lib/smartmode.js";
-import { aqiCategory, aqiPercent, computeAQI } from "../lib/aqi.js";
+import { aqiCategory, aqiPercent, normalizeAqi } from "../lib/aqi.js";
+import { normalizeFanSpeed } from "../lib/fan-speed.js";
 
 const AQI_DEADBAND = 5;
 const FORCE_INTERVAL_SEC = 60;
-const EMA_ALPHA = 0.25;
 const SMART_MODE_COOLDOWN_SEC = 30;
 const MANUAL_OVERRIDE_COOLDOWN_MS = 2 * 60 * 1000;
-
-function ema(prev, next, alpha) {
-  if (prev == null) return next;
-  return alpha * next + (1 - alpha) * prev;
-}
-
 
 function shouldUpdateDisplay(prev, next, nowSec) {
   if (!prev) return true;
@@ -37,19 +31,11 @@ function shouldUpdateDisplay(prev, next, nowSec) {
 
 function normalizePayloadFanSpeed(payload) {
   if ("fanSpeed" in payload && payload?.fanSpeed != null) {
-    const normalized = String(payload.fanSpeed).toUpperCase();
-    return normalized === "OFF" ? "OFF" : normalized;
+    return normalizeFanSpeed(payload.fanSpeed);
   }
 
   if (!("fan_speed" in payload)) return null;
-
-  const numeric = Number(payload?.fan_speed);
-  if (!Number.isFinite(numeric)) return null;
-  if (numeric <= 0) return "OFF";
-  if (numeric >= 60) return "FAST";
-  if (numeric >= 41) return "MODERATE";
-  if (numeric >= 40) return "SLOW";
-  return null;
+  return normalizeFanSpeed(payload?.fan_speed);
 }
 
 function parseReportedBoolean(value) {
@@ -174,25 +160,43 @@ export async function ingest({ deviceId, payload, userId = null }) {
   const raw = {
     DeviceId: deviceId,
     Timestamp: ReadingsRepo.makeRawSortKey(iso),
-
     pm25: payload?.pm25 ?? null,
     pm10: payload?.pm10 ?? null,
     vocsPpm: payload?.vocsPpm ?? null,
     tempC: payload?.tempC ?? null,
     humidity: payload?.humidity ?? null,
     harmfulGasDetected: !!payload?.harmfulGasDetected,
-
+    aqi: normalizeAqi(payload?.aqi),
+    aqiCategory:
+      payload?.aqiCategory != null ? String(payload.aqiCategory) : null,
+    aqiPercent:
+      payload?.aqiPercent == null || !Number.isFinite(Number(payload.aqiPercent))
+        ? null
+        : Math.round(Number(payload.aqiPercent)),
+    aqiPrimaryPollutant:
+      payload?.aqiPrimaryPollutant ?? payload?.primaryPollutant ?? null,
+    aqiPm25:
+      payload?.aqiPm25 == null || !Number.isFinite(Number(payload.aqiPm25))
+        ? null
+        : Math.round(Number(payload.aqiPm25)),
+    aqiPm10:
+      payload?.aqiPm10 == null || !Number.isFinite(Number(payload.aqiPm10))
+        ? null
+        : Math.round(Number(payload.aqiPm10)),
     ingestedAtSec: nowSec,
   };
 
   await ReadingsRepo.putRawItem(raw);
 
   const prev = await ReadingsRepo.getLatestDisplayItem(deviceId);
-
-  const { aqi, primary, aqiPm25, aqiPm10 } = computeAQI(raw);
-
-  const aqiEma = ema(prev?.aqiEma, aqi, EMA_ALPHA);
-  const aqiSmooth = Math.round(aqiEma);
+  const normalizedPercent =
+    raw.aqiPercent == null
+      ? aqiPercent(raw.aqi)
+      : Math.max(0, Math.min(100, raw.aqiPercent));
+  const normalizedCategory =
+    raw.aqiCategory == null || raw.aqiCategory.trim() === ""
+      ? aqiCategory(raw.aqi)
+      : raw.aqiCategory.trim();
 
   const next = {
     DeviceId: deviceId,
@@ -203,13 +207,12 @@ export async function ingest({ deviceId, payload, userId = null }) {
     tempC: raw.tempC,
     humidity: raw.humidity,
     harmfulGasDetected: raw.harmfulGasDetected,
-    aqi: aqiSmooth,
-    aqiEma,
-    aqiPrimaryPollutant: primary,
-    aqiPm25,
-    aqiPm10,
-    aqiCategory: aqiCategory(aqiSmooth),
-    aqiPercent: aqiPercent(aqiSmooth),
+    aqi: raw.aqi,
+    aqiPrimaryPollutant: raw.aqiPrimaryPollutant,
+    aqiPm25: raw.aqiPm25,
+    aqiPm10: raw.aqiPm10,
+    aqiCategory: normalizedCategory,
+    aqiPercent: normalizedPercent,
     updatedAtSec: nowSec,
     sourceRawTimestamp: raw.Timestamp,
   };
@@ -293,7 +296,7 @@ export async function ingest({ deviceId, payload, userId = null }) {
 
   try {
     const analytics = await AnalyticsRepo.updateDailyStats(deviceId, date, {
-      aqi: aqiSmooth,
+      aqi: next.aqi,
       isOn: fanOn,
       smartMode,
       sampledAtSec: nowSec,

@@ -1,7 +1,6 @@
 import * as DevicesRepo from "../repos/devices.repo.js";
 import * as NotificationsService from "./notifications.service.js";
 import { publishCommand } from "./control.service.js";
-import QRCode from "qrcode";
 
 const DEFAULT_DEVICE_ONLINE_TIMEOUT_MS = 2 * 60 * 1000;
 
@@ -132,8 +131,7 @@ export async function registerDevice(userId, { deviceId, name }) {
   }
 
   const device = await DevicesRepo.bindOwnerAndMaybeRename(deviceId, userId, name);
-  const qrCode = await QRCode.toDataURL(deviceId);
-  return { ...withEffectiveConnectionStatus(device), qrCode };
+  return withEffectiveConnectionStatus(device);
 }
 
 export async function renameMyDevice(userId, deviceId, newName) {
@@ -176,3 +174,5 @@ export async function unregisterMyDevice(userId, deviceId) {
 
   return withEffectiveConnectionStatus(updated);
 }
+
+

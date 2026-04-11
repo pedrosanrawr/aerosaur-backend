@@ -3,7 +3,8 @@ import { IoTDataPlaneClient, PublishCommand } from "@aws-sdk/client-iot-data-pla
 import * as ControlRepo from "../repos/control.repo.js";
 import * as ReadingsRepo from "../repos/readings.repo.js";
 import { buildSmartModePatch } from "../lib/smartmode.js";
-import { computeAQI } from "../lib/aqi.js";
+import { normalizeAqi } from "../lib/aqi.js";
+import { ALLOWED_FAN_SPEED, normalizeFanSpeed, toFanSpeedValue } from "../lib/fan-speed.js";
 
 const rawEndpoint = (process.env.IOT_ENDPOINT || process.env.IOT_DATA_ENDPOINT || "").trim();
 
@@ -15,29 +16,9 @@ const iot = endpointHost
   ? new IoTDataPlaneClient({ endpoint: `https://${endpointHost}` })
   : null;
 
-const ALLOWED_FAN_SPEED = new Set(["SLOW", "MODERATE", "FAST"]);
 const CONTROL_COMMAND_FIELDS = ["power", "smartMode", "autoAdjust", "autoOff", "fanSpeed"];
 const ONE_SHOT_COMMAND_FIELDS = ["clearWifiCredentials"];
 const MANUAL_OVERRIDE_FIELDS = ["power", "fanSpeed", "smartMode", "autoAdjust", "autoOff"];
-
-function normalizeReportedFanSpeed(value) {
-  if (value == null) return null;
-
-  if (typeof value === "string") {
-    const normalized = value.trim().toUpperCase();
-    if (ALLOWED_FAN_SPEED.has(normalized) || normalized === "OFF") {
-      return normalized;
-    }
-  }
-
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return null;
-  if (numeric <= 0) return "OFF";
-  if (numeric >= 60) return "FAST";
-  if (numeric >= 41) return "MODERATE";
-  if (numeric >= 40) return "SLOW";
-  return null;
-}
 
 function parseBooleanField(value, fieldName) {
   if (typeof value === "boolean") return value;
@@ -111,13 +92,6 @@ function buildEffectiveControl(control = {}) {
     effective.power = control.reportedPower;
   }
 
-  const reportedFanSpeed = normalizeReportedFanSpeed(
-    control.reportedFanSpeed ?? control.fan_speed
-  );
-  if (reportedFanSpeed) {
-    effective.fanSpeed = reportedFanSpeed;
-  }
-
   if (typeof control.reportedSmartMode === "boolean") {
     effective.smartMode = control.reportedSmartMode;
   }
@@ -132,6 +106,19 @@ function buildEffectiveControl(control = {}) {
 
   if (effective.power === false) {
     effective.fanSpeed = "OFF";
+    return effective;
+  }
+
+  const requestedFanSpeed = normalizeFanSpeed(control.fanSpeed);
+  if (requestedFanSpeed) {
+    effective.fanSpeed = requestedFanSpeed;
+  }
+
+  const reportedFanSpeed = normalizeFanSpeed(
+    control.reportedFanSpeed ?? control.fan_speed
+  );
+  if (reportedFanSpeed && (effective.smartMode || !requestedFanSpeed)) {
+    effective.fanSpeed = reportedFanSpeed;
   }
 
   return effective;
@@ -150,6 +137,10 @@ export async function publishCommand(deviceId, patch, meta = {}) {
     ts: Date.now(),
     ...meta,
   };
+
+  if ("fanSpeed" in payload) {
+    payload.fan_speed = toFanSpeedValue(payload.fanSpeed);
+  }
 
   await iot.send(
     new PublishCommand({
@@ -227,11 +218,11 @@ export async function updateControl({ userId, deviceId, patch }) {
 
       if (readings?.length) {
         const recentAqis = readings
-          .map((reading) => computeAQI(reading).aqi)
+          .map((reading) => normalizeAqi(reading?.aqi))
           .filter((aqi) => Number.isFinite(aqi));
 
         if (!recentAqis.length) {
-          throw new Error("No AQI-capable readings available for smart mode");
+          throw new Error("No firmware-reported AQI readings available for smart mode");
         }
 
         const avgAqi =

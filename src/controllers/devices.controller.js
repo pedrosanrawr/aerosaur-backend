@@ -20,8 +20,8 @@ function requireUserId(event) {
 
 function normalizeDevice(d) {
   if (!d) return d;
-  const { DeviceId, qrCode, ...rest } = d;
-  return { ...rest, deviceId: DeviceId, qrCode };
+  const { DeviceId, ...rest } = d;
+  return { ...rest, deviceId: DeviceId };
 }
 
 export async function listDevices(event) {
@@ -94,3 +94,4 @@ export async function unregisterDevice(event) {
 
   return json(200, { device: normalizeDevice(updated) });
 }
+
