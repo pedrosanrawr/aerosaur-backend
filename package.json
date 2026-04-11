@@ -8,14 +8,13 @@
     "deploy:guided": "sam deploy --guided"
   },
   "dependencies": {
-    "@aws-sdk/client-iot-data-plane": "^3.0.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-iot-data-plane": "^3.0.0",
     "@aws-sdk/lib-dynamodb": "^3.0.0",
     "axios": "^1.6.0",
     "dotenv": "^17.3.1",
     "express": "^4.18.2",
     "firebase-admin": "^12.0.0",
-    "qrcode": "^1.5.4",
     "serverless-http": "^3.2.0"
   }
 }

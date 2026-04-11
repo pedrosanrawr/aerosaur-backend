@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { normalizeFanSpeed } from "../lib/fan-speed.js";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
@@ -8,19 +9,11 @@ const DEVICES_TABLE = process.env.DEVICES_TABLE;
 
 function normalizeReportedFanSpeed(payload) {
   if ("fanSpeed" in payload && payload.fanSpeed != null) {
-    const normalized = String(payload.fanSpeed).toUpperCase();
-    return normalized === "OFF" ? "OFF" : normalized;
+    return normalizeFanSpeed(payload.fanSpeed);
   }
 
   if (!("fan_speed" in payload)) return null;
-
-  const numeric = Number(payload.fan_speed);
-  if (!Number.isFinite(numeric)) return null;
-  if (numeric <= 0) return "OFF";
-  if (numeric >= 60) return "FAST";
-  if (numeric >= 41) return "MODERATE";
-  if (numeric >= 40) return "SLOW";
-  return null;
+  return normalizeFanSpeed(payload.fan_speed);
 }
 
 function parseReportedBoolean(value) {
